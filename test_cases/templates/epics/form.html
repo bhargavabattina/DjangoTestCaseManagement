@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if epic %}Edit Epic{% else %}Create Epic{% endif %} - Test Case Management
+{% endblock %}
+
+{% block nav_epics %}active{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:epic_list' %}">Epics</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+            {% if epic %}Edit Epic{% else %}Create Epic{% endif %}
+        </li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">{% if epic %}Edit Epic: {{ epic.name }}{% else %}Create New Epic{% endif %}</h1>
+    <a href="{% url 'test_cases:epic_list' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Epics
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            {% if epic %}
+                <i class="fas fa-edit"></i> Edit Epic Details
+            {% else %}
+                <i class="fas fa-plus"></i> Epic Information
+            {% endif %}
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if epic %}
+        <div class="mb-4 p-3 border-start border-4 border-primary bg-light">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-project-diagram text-primary me-2"></i>
+                <h6 class="mb-0">Hierarchical Context:</h6>
+            </div>
+            <div class="d-flex align-items-center">
+                <span class="badge bg-primary me-2">Project</span>
+                <strong>{{ epic.project.name }}</strong>
+                <i class="fas fa-angle-right mx-2"></i>
+                <span class="badge bg-info">Epic</span>
+                <strong class="ms-2">{{ epic.name }}</strong>
+            </div>
+        </div>
+        {% endif %}
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            
+            <!-- Project Selection -->
+            <div class="mb-3">
+                <label for="{{ form.project.id_for_label }}" class="form-label">{{ form.project.label }} *</label>
+                {{ form.project }}
+                {% if form.project.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.project.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if form.project.help_text %}
+                    <div class="form-text">{{ form.project.help_text }}</div>
+                {% endif %}
+            </div>
+            
+            <!-- Epic Name -->
+            <div class="mb-3">
+                <label for="{{ form.name.id_for_label }}" class="form-label">{{ form.name.label }} *</label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.name.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if form.name.help_text %}
+                    <div class="form-text">{{ form.name.help_text }}</div>
+                {% endif %}
+            </div>
+            
+            <!-- Description -->
+            <div class="mb-3">
+                <label for="{{ form.description.id_for_label }}" class="form-label">{{ form.description.label }}</label>
+                {{ form.description }}
+                {% if form.description.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.description.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if form.description.help_text %}
+                    <div class="form-text">{{ form.description.help_text }}</div>
+                {% endif %}
+            </div>
+            
+            <!-- Status -->
+            <div class="mb-3">
+                <label for="{{ form.status.id_for_label }}" class="form-label">{{ form.status.label }}</label>
+                {{ form.status }}
+                {% if form.status.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.status.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if form.status.help_text %}
+                    <div class="form-text">{{ form.status.help_text }}</div>
+                {% endif %}
+            </div>
+            
+            <!-- Non-field Errors -->
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    {% for error in form.non_field_errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            <!-- Form Actions -->
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <a href="{% url 'test_cases:epic_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> 
+                    {% if epic %}Update Epic{% else %}Create Epic{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Epic Information Card (for edit) -->
+{% if epic %}
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-info-circle"></i> Epic Information
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Project:</strong> {{ epic.project.name }}</p>
+                <p><strong>Created By:</strong> {{ epic.created_by.get_full_name|default:epic.created_by.username }}</p>
+                <p><strong>Created Date:</strong> {{ epic.created_date|date:"F j, Y, g:i a" }}</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Status:</strong> 
+                    <span class="badge bg-{% if epic.status == 'open' %}info{% elif epic.status == 'in_progress' %}warning{% else %}success{% endif %}">
+                        {{ epic.get_status_display }}
+                    </span>
+                </p>
+                <p><strong>Last Updated:</strong> {{ epic.updated_date|date:"F j, Y, g:i a" }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-book-open"></i> User Stories in this Epic
+        </h5>
+    </div>
+    <div class="card-body">
+        {% with stories=epic.user_stories.all %}
+            {% if stories %}
+                <div class="list-group">
+                    {% for story in stories %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ story.name }}</h6>
+                                <small class="text-muted">{{ story.created_date|date:"M d, Y" }}</small>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <span class="badge bg-{{ story.status|yesno:'success,warning,danger,secondary' }}">
+                                    {{ story.get_status_display }}
+                                </span>
+                                <a href="#" class="btn btn-sm btn-outline-primary">View Details</a>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-3">
+                    <a href="{% url 'test_cases:story_list' %}?epic={{ epic.id }}" class="btn btn-outline-info">
+                        <i class="fas fa-list"></i> View All Stories
+                    </a>
+                    <a href="{% url 'test_cases:story_create' %}" class="btn btn-outline-success">
+                        <i class="fas fa-plus"></i> Add Story
+                    </a>
+                </div>
+            {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-book-open fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No user stories added to this epic yet.</p>
+                    <a href="{% url 'test_cases:story_create' %}" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Add First User Story
+                    </a>
+                </div>
+            {% endif %}
+        {% endwith %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Add Bootstrap classes to form elements
+    document.addEventListener('DOMContentLoaded', function() {
+        // Highlight required fields
+        const requiredFields = document.querySelectorAll('label:contains("*")');
+        requiredFields.forEach(field => {
+            field.classList.add('required-field');
+        });
+        
+        // Auto-focus on the first form field
+        const firstInput = document.querySelector('form select, form input:not([type="hidden"]), form textarea');
+        if (firstInput) {
+            firstInput.focus();
+        }
+        
+        // Form submission loading state
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function() {
+            const submitButton = this.querySelector('button[type="submit"]');
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+            submitButton.disabled = true;
+        });
+    });
+</script>
+{% endblock %}

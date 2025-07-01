@@ -1,0 +1,603 @@
+{% extends "base.html" %}
+
+{% block title %}User Stories - Test Case Management{% endblock %}
+
+{% block nav_stories %}active{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item active" aria-current="page">User Stories</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">User Stories</h1>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-secondary" id="bulk-actions-btn" style="display: none;">
+            <i class="fas fa-cogs"></i> Bulk Actions
+        </button>
+        <a href="{% url 'test_cases:story_create' %}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> New User Story
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Search and Filter Section -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label for="project" class="form-label">Filter by Project</label>
+                <select name="project" id="project" class="form-control">
+                    <option value="">All Projects</option>
+                    {% for project in projects %}
+                        <option value="{{ project.id }}" {% if selected_project == project.id|stringformat:"s" %}selected{% endif %}>
+                            {{ project.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="epic" class="form-label">Filter by Epic</label>
+                <select name="epic" id="epic" class="form-control">
+                    <option value="">All Epics</option>
+                    {% for epic in epics %}
+                        <option value="{{ epic.id }}" 
+                                data-project="{{ epic.project.id }}"
+                                {% if selected_epic == epic.id|stringformat:"s" %}selected{% endif %}>
+                            {{ epic.name }} ({{ epic.project.name }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="search" class="form-label">Search User Stories</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" 
+                           class="form-control" 
+                           id="search" 
+                           name="search" 
+                           value="{{ search_query }}" 
+                           placeholder="Search by name, description or acceptance criteria...">
+                </div>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-outline-primary me-2">
+                    <i class="fas fa-search"></i> Search
+                </button>
+                <a href="{% url 'test_cases:story_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Bulk Actions Panel -->
+<div class="card mb-4" id="bulk-actions-panel" style="display: none;">
+    <div class="card-body">
+        <form id="bulk-actions-form">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label for="bulk-status" class="form-label">Change Status To</label>
+                    <select name="bulk-status" id="bulk-status" class="form-control">
+                        <option value="">Select Status...</option>
+                        <option value="todo">To Do</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="testing">Testing</option>
+                        <option value="done">Done</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="bulk-priority" class="form-label">Change Priority To</label>
+                    <select name="bulk-priority" id="bulk-priority" class="form-control">
+                        <option value="">Select Priority...</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="button" class="btn btn-success" id="apply-bulk-actions">
+                        <i class="fas fa-check"></i> Apply Changes
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="cancel-bulk-actions">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <span id="selected-count" class="text-muted">0 items selected</span>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- User Stories Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">All User Stories</h5>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="select-all">
+                <label class="form-check-label" for="select-all">
+                    Select All
+                </label>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if stories %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col" width="50">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="header-select-all">
+                                </div>
+                            </th>
+                            <th scope="col">Story Name</th>
+                            <th scope="col">Hierarchical Context</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Priority</th>
+                            <th scope="col">Story Points</th>
+                            <th scope="col">Assigned To</th>
+                            <th scope="col">Created Date</th>
+                            <th scope="col" width="250">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for story in stories %}
+                            <tr>
+                                <td>
+                                    <div class="form-check">
+                                        <input class="form-check-input story-checkbox" 
+                                               type="checkbox" 
+                                               value="{{ story.pk }}"
+                                               id="story-{{ story.pk }}">
+                                    </div>
+                                </td>
+                                <td>
+                                    <div>
+                                        <strong>{{ story.name }}</strong>
+                                        {% if story.description %}
+                                            <div class="text-muted small text-truncate" style="max-width: 200px;" title="{{ story.description }}">
+                                                {{ story.description }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-column gap-1">
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-project-diagram text-primary me-2"></i>
+                                            <span class="badge bg-primary small">{{ story.epic.project.name }}</span>
+                                        </div>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-layer-group text-success me-2"></i>
+                                            <span class="badge bg-success small">{{ story.epic.name }}</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if story.status == 'todo' %}secondary{% elif story.status == 'in_progress' %}warning{% elif story.status == 'testing' %}info{% else %}success{% endif %}">
+                                        {{ story.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if story.priority == 'low' %}secondary{% elif story.priority == 'medium' %}info{% elif story.priority == 'high' %}warning{% else %}danger{% endif %}">
+                                        {% if story.priority == 'critical' %}
+                                            <i class="fas fa-exclamation-triangle"></i>
+                                        {% elif story.priority == 'high' %}
+                                            <i class="fas fa-arrow-up"></i>
+                                        {% elif story.priority == 'medium' %}
+                                            <i class="fas fa-minus"></i>
+                                        {% else %}
+                                            <i class="fas fa-arrow-down"></i>
+                                        {% endif %}
+                                        {{ story.get_priority_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if story.story_points %}
+                                        <span class="badge bg-dark">{{ story.story_points }} pts</span>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if story.assigned_to %}
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-user text-info me-2"></i>
+                                            <small>{{ story.assigned_to.get_full_name|default:story.assigned_to.username }}</small>
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted small">Unassigned</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small>{{ story.created_date|date:"M d, Y H:i" }}</small>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{% url 'test_cases:story_edit' story.pk %}" 
+                                           class="btn btn-sm btn-outline-primary" 
+                                           title="Edit User Story">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <a href="{% url 'test_cases:testcase_list' %}?story={{ story.pk }}" 
+                                           class="btn btn-sm btn-outline-info" 
+                                           title="View Test Cases">
+                                            <i class="fas fa-clipboard-check"></i>
+                                        </a>
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-success" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#viewModal{{ story.pk }}"
+                                                title="View Details">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-danger" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#deleteModal{{ story.pk }}"
+                                                title="Delete User Story">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            {% if stories.has_other_pages %}
+                <nav aria-label="User Stories pagination" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        {% if stories.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_epic %}&epic={{ selected_epic }}{% endif %}">
+                                    <i class="fas fa-angle-double-left"></i>
+                                </a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ stories.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_epic %}&epic={{ selected_epic }}{% endif %}">
+                                    <i class="fas fa-angle-left"></i>
+                                </a>
+                            </li>
+                        {% endif %}
+                        
+                        {% for num in stories.paginator.page_range %}
+                            {% if stories.number == num %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ num }}</span>
+                                </li>
+                            {% elif num > stories.number|add:'-3' and num < stories.number|add:'3' %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_epic %}&epic={{ selected_epic }}{% endif %}">{{ num }}</a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if stories.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ stories.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_epic %}&epic={{ selected_epic }}{% endif %}">
+                                    <i class="fas fa-angle-right"></i>
+                                </a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ stories.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_epic %}&epic={{ selected_epic }}{% endif %}">
+                                    <i class="fas fa-angle-double-right"></i>
+                                </a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                
+                <div class="text-center text-muted small">
+                    Showing {{ stories.start_index }} to {{ stories.end_index }} of {{ stories.paginator.count }} user stories
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-book-open fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No User Stories Found</h5>
+                {% if search_query or selected_project or selected_epic %}
+                    <p class="text-muted">No user stories match your search criteria.</p>
+                    <a href="{% url 'test_cases:story_list' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-times"></i> Clear Filters
+                    </a>
+                {% else %}
+                    <p class="text-muted">Get started by creating your first user story.</p>
+                    <a href="{% url 'test_cases:story_create' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Create User Story
+                    </a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- View Details Modals -->
+{% for story in stories %}
+    <div class="modal fade" id="viewModal{{ story.pk }}" tabindex="-1" aria-labelledby="viewModalLabel{{ story.pk }}" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="viewModalLabel{{ story.pk }}">User Story Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h6><strong>{{ story.name }}</strong></h6>
+                            <div class="mb-3">
+                                <strong>Hierarchical Path:</strong>
+                                <nav aria-label="breadcrumb">
+                                    <ol class="breadcrumb">
+                                        <li class="breadcrumb-item">{{ story.epic.project.name }}</li>
+                                        <li class="breadcrumb-item">{{ story.epic.name }}</li>
+                                        <li class="breadcrumb-item active">{{ story.name }}</li>
+                                    </ol>
+                                </nav>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Status:</strong> 
+                                <span class="badge bg-{% if story.status == 'todo' %}secondary{% elif story.status == 'in_progress' %}warning{% elif story.status == 'testing' %}info{% else %}success{% endif %}">
+                                    {{ story.get_status_display }}
+                                </span>
+                            </p>
+                            <p><strong>Priority:</strong> 
+                                <span class="badge bg-{% if story.priority == 'low' %}secondary{% elif story.priority == 'medium' %}info{% elif story.priority == 'high' %}warning{% else %}danger{% endif %}">
+                                    {{ story.get_priority_display }}
+                                </span>
+                            </p>
+                            <p><strong>Story Points:</strong> {{ story.story_points|default:"Not specified" }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Assigned To:</strong> {{ story.assigned_to.get_full_name|default:story.assigned_to.username|default:"Unassigned" }}</p>
+                            <p><strong>Created By:</strong> {{ story.created_by.get_full_name|default:story.created_by.username }}</p>
+                            <p><strong>Created Date:</strong> {{ story.created_date|date:"F j, Y, g:i a" }}</p>
+                        </div>
+                    </div>
+                    {% if story.description %}
+                        <div class="mt-3">
+                            <strong>Description:</strong>
+                            <div class="p-3 bg-light rounded">{{ story.description|linebreaks }}</div>
+                        </div>
+                    {% endif %}
+                    {% if story.acceptance_criteria %}
+                        <div class="mt-3">
+                            <strong>Acceptance Criteria:</strong>
+                            <div class="p-3 bg-light rounded">{{ story.acceptance_criteria|linebreaks }}</div>
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <a href="{% url 'test_cases:story_edit' story.pk %}" class="btn btn-primary">
+                        <i class="fas fa-edit"></i> Edit Story
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endfor %}
+
+<!-- Delete Confirmation Modals -->
+{% for story in stories %}
+    <div class="modal fade" id="deleteModal{{ story.pk }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ story.pk }}" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteModalLabel{{ story.pk }}">Delete User Story</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete the user story <strong>"{{ story.name }}"</strong>?</p>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Warning:</strong> This will also delete all associated test cases. This action cannot be undone.
+                    </div>
+                    <div class="mt-3">
+                        <strong>Hierarchical Path:</strong>
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb">
+                                <li class="breadcrumb-item">{{ story.epic.project.name }}</li>
+                                <li class="breadcrumb-item">{{ story.epic.name }}</li>
+                                <li class="breadcrumb-item active">{{ story.name }}</li>
+                            </ol>
+                        </nav>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form method="post" action="{% url 'test_cases:story_delete' story.pk %}" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> Delete User Story
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endfor %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-submit search form on Enter key
+    document.getElementById('search').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            this.form.submit();
+        }
+    });
+    
+    // Auto-submit form when project filter changes
+    document.getElementById('project').addEventListener('change', function() {
+        const selectedProject = this.value;
+        const epicSelect = document.getElementById('epic');
+        
+        // Filter epics based on selected project
+        Array.from(epicSelect.options).forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const projectId = option.getAttribute('data-project');
+                option.style.display = (!selectedProject || projectId === selectedProject) ? 'block' : 'none';
+            }
+        });
+        
+        // Reset epic selection if it doesn't belong to selected project
+        if (selectedProject && epicSelect.value) {
+            const selectedEpicOption = epicSelect.options[epicSelect.selectedIndex];
+            const epicProjectId = selectedEpicOption.getAttribute('data-project');
+            if (epicProjectId !== selectedProject) {
+                epicSelect.value = '';
+            }
+        }
+        
+        this.form.submit();
+    });
+    
+    // Auto-submit form when epic filter changes
+    document.getElementById('epic').addEventListener('change', function() {
+        this.form.submit();
+    });
+    
+    // Bulk actions functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const bulkActionsBtn = document.getElementById('bulk-actions-btn');
+        const bulkActionsPanel = document.getElementById('bulk-actions-panel');
+        const selectAllCheckbox = document.getElementById('select-all');
+        const headerSelectAllCheckbox = document.getElementById('header-select-all');
+        const storyCheckboxes = document.querySelectorAll('.story-checkbox');
+        const selectedCountSpan = document.getElementById('selected-count');
+        
+        // Handle individual checkbox changes
+        storyCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateBulkActions);
+        });
+        
+        // Handle select all checkboxes
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                const isChecked = this.checked;
+                storyCheckboxes.forEach(checkbox => {
+                    checkbox.checked = isChecked;
+                });
+                if (headerSelectAllCheckbox) {
+                    headerSelectAllCheckbox.checked = isChecked;
+                }
+                updateBulkActions();
+            });
+        }
+        
+        if (headerSelectAllCheckbox) {
+            headerSelectAllCheckbox.addEventListener('change', function() {
+                const isChecked = this.checked;
+                storyCheckboxes.forEach(checkbox => {
+                    checkbox.checked = isChecked;
+                });
+                if (selectAllCheckbox) {
+                    selectAllCheckbox.checked = isChecked;
+                }
+                updateBulkActions();
+            });
+        }
+        
+        function updateBulkActions() {
+            const checkedBoxes = document.querySelectorAll('.story-checkbox:checked');
+            const count = checkedBoxes.length;
+            
+            if (count > 0) {
+                bulkActionsBtn.style.display = 'block';
+                selectedCountSpan.textContent = `${count} item${count > 1 ? 's' : ''} selected`;
+            } else {
+                bulkActionsBtn.style.display = 'none';
+                bulkActionsPanel.style.display = 'none';
+            }
+        }
+        
+        // Show/hide bulk actions panel
+        bulkActionsBtn.addEventListener('click', function() {
+            bulkActionsPanel.style.display = bulkActionsPanel.style.display === 'none' ? 'block' : 'none';
+        });
+        
+        // Cancel bulk actions
+        document.getElementById('cancel-bulk-actions').addEventListener('click', function() {
+            bulkActionsPanel.style.display = 'none';
+            storyCheckboxes.forEach(checkbox => checkbox.checked = false);
+            if (selectAllCheckbox) selectAllCheckbox.checked = false;
+            if (headerSelectAllCheckbox) headerSelectAllCheckbox.checked = false;
+            updateBulkActions();
+        });
+        
+        // Apply bulk actions
+        document.getElementById('apply-bulk-actions').addEventListener('click', function() {
+            const checkedBoxes = document.querySelectorAll('.story-checkbox:checked');
+            const bulkStatus = document.getElementById('bulk-status').value;
+            const bulkPriority = document.getElementById('bulk-priority').value;
+            
+            if (checkedBoxes.length === 0) {
+                alert('Please select at least one user story.');
+                return;
+            }
+            
+            if (!bulkStatus && !bulkPriority) {
+                alert('Please select at least one action to perform.');
+                return;
+            }
+            
+            if (confirm(`Apply changes to ${checkedBoxes.length} selected user stories?`)) {
+                // Here you would typically make an AJAX request to apply bulk changes
+                // For now, we'll just show a success message
+                alert('Bulk changes would be applied here. This requires backend implementation.');
+            }
+        });
+    });
+    
+    // Highlight search terms in results
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchTerm = '{{ search_query|escapejs }}';
+        if (searchTerm) {
+            const tableRows = document.querySelectorAll('tbody tr');
+            tableRows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                cells.forEach(cell => {
+                    if (cell.textContent.toLowerCase().includes(searchTerm.toLowerCase())) {
+                        const regex = new RegExp(`(${searchTerm})`, 'gi');
+                        cell.innerHTML = cell.innerHTML.replace(regex, '<mark>$1</mark>');
+                    }
+                });
+            });
+        }
+    });
+    
+    // Tooltip initialization for truncated text
+    document.addEventListener('DOMContentLoaded', function() {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+        const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+</script>
+{% endblock %}

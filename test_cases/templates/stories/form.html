@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if story %}Edit User Story{% else %}Create User Story{% endif %} - Test Case Management
+{% endblock %}
+
+{% block nav_stories %}active{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:story_list' %}">User Stories</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+            {% if story %}Edit User Story{% else %}Create User Story{% endif %}
+        </li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">{% if story %}Edit User Story: {{ story.name }}{% else %}Create New User Story{% endif %}</h1>
+    <a href="{% url 'test_cases:story_list' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> Back to User Stories
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            {% if story %}
+                <i class="fas fa-edit"></i> Edit User Story Details
+            {% else %}
+                <i class="fas fa-plus"></i> User Story Information
+            {% endif %}
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if story %}
+        <div class="mb-4 p-3 border-start border-4 border-primary bg-light">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-sitemap text-primary me-2"></i>
+                <h6 class="mb-0">Hierarchical Context:</h6>
+            </div>
+            <div class="d-flex align-items-center flex-wrap">
+                <span class="badge bg-primary me-2">Project</span>
+                <strong>{{ story.epic.project.name }}</strong>
+                <i class="fas fa-angle-right mx-2"></i>
+                <span class="badge bg-success me-2">Epic</span>
+                <strong>{{ story.epic.name }}</strong>
+                <i class="fas fa-angle-right mx-2"></i>
+                <span class="badge bg-info me-2">User Story</span>
+                <strong class="ms-2">{{ story.name }}</strong>
+            </div>
+        </div>
+        {% endif %}
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            
+            <!-- Epic Selection -->
+            <div class="mb-3">
+                <label for="{{ form.epic.id_for_label }}" class="form-label">{{ form.epic.label }} *</label>
+                {{ form.epic }}
+                {% if form.epic.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.epic.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if form.epic.help_text %}
+                    <div class="form-text">{{ form.epic.help_text }}</div>
+                {% endif %}
+            </div>
+            
+            <!-- User Story Name -->
+            <div class="mb-3">
+                <label for="{{ form.name.id_for_label }}" class="form-label">{{ form.name.label }} *</label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.name.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if form.name.help_text %}
+                    <div class="form-text">{{ form.name.help_text }}</div>
+                {% endif %}
+            </div>
+            
+            <!-- Description -->
+            <div class="mb-3">
+                <label for="{{ form.description.id_for_label }}" class="form-label">{{ form.description.label }}</label>
+                {{ form.description }}
+                {% if form.description.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.description.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if form.description.help_text %}
+                    <div class="form-text">{{ form.description.help_text }}</div>
+                {% endif %}
+            </div>
+            
+            <!-- Acceptance Criteria -->
+            <div class="mb-3">
+                <label for="{{ form.acceptance_criteria.id_for_label }}" class="form-label">{{ form.acceptance_criteria.label }}</label>
+                {{ form.acceptance_criteria }}
+                {% if form.acceptance_criteria.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.acceptance_criteria.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <div class="form-text">
+                    Define clear acceptance criteria that specify when this user story is considered complete.
+                </div>
+            </div>
+            
+            <!-- Status and Priority Row -->
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">{{ form.status.label }}</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.status.errors %}
+                                    <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="{{ form.priority.id_for_label }}" class="form-label">{{ form.priority.label }}</label>
+                        {{ form.priority }}
+                        {% if form.priority.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.priority.errors %}
+                                    <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Story Points and Assignment Row -->
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="{{ form.story_points.id_for_label }}" class="form-label">{{ form.story_points.label }}</label>
+                        {{ form.story_points }}
+                        {% if form.story_points.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.story_points.errors %}
+                                    <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">
+                            Estimation points for this user story (1-100).
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="{{ form.assigned_to.id_for_label }}" class="form-label">{{ form.assigned_to.label }}</label>
+                        {{ form.assigned_to }}
+                        {% if form.assigned_to.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.assigned_to.errors %}
+                                    <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">
+                            Assign this user story to a team member.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Non-field Errors -->
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    {% for error in form.non_field_errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            <!-- Form Actions -->
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <a href="{% url 'test_cases:story_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> 
+                    {% if story %}Update User Story{% else %}Create User Story{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- User Story Information Card (for edit) -->
+{% if story %}
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-info-circle"></i> User Story Information
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Project:</strong> {{ story.epic.project.name }}</p>
+                <p><strong>Epic:</strong> {{ story.epic.name }}</p>
+                <p><strong>Created By:</strong> {{ story.created_by.get_full_name|default:story.created_by.username }}</p>
+                <p><strong>Created Date:</strong> {{ story.created_date|date:"F j, Y, g:i a" }}</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Status:</strong> 
+                    <span class="badge bg-{% if story.status == 'todo' %}secondary{% elif story.status == 'in_progress' %}warning{% elif story.status == 'testing' %}info{% else %}success{% endif %}">
+                        {{ story.get_status_display }}
+                    </span>
+                </p>
+                <p><strong>Priority:</strong> 
+                    <span class="badge bg-{% if story.priority == 'low' %}secondary{% elif story.priority == 'medium' %}info{% elif story.priority == 'high' %}warning{% else %}danger{% endif %}">
+                        {{ story.get_priority_display }}
+                    </span>
+                </p>
+                <p><strong>Last Updated:</strong> {{ story.updated_date|date:"F j, Y, g:i a" }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-clipboard-check"></i> Test Cases for this User Story
+        </h5>
+    </div>
+    <div class="card-body">
+        {% with testcases=story.test_cases.all %}
+            {% if testcases %}
+                <div class="list-group">
+                    {% for testcase in testcases %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ testcase.name }}</h6>
+                                <small class="text-muted">{{ testcase.created_date|date:"M d, Y" }}</small>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <div>
+                                    <span class="badge bg-{{ testcase.execution_status|yesno:'success,danger,warning,secondary' }}">
+                                        {{ testcase.get_execution_status_display }}
+                                    </span>
+                                    <span class="badge bg-{{ testcase.priority|yesno:'danger,warning,info,secondary' }}">
+                                        {{ testcase.get_priority_display }}
+                                    </span>
+                                </div>
+                                <a href="#" class="btn btn-sm btn-outline-primary">View Details</a>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-3">
+                    <a href="{% url 'test_cases:testcase_list' %}?story={{ story.id }}" class="btn btn-outline-info">
+                        <i class="fas fa-list"></i> View All Test Cases
+                    </a>
+                    <a href="{% url 'test_cases:testcase_create' %}" class="btn btn-outline-success">
+                        <i class="fas fa-plus"></i> Add Test Case
+                    </a>
+                </div>
+            {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-clipboard-check fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No test cases added to this user story yet.</p>
+                    <a href="{% url 'test_cases:testcase_create' %}" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Add First Test Case
+                    </a>
+                </div>
+            {% endif %}
+        {% endwith %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Dynamic epic filtering based on project selection
+    document.addEventListener('DOMContentLoaded', function() {
+        const epicSelect = document.getElementById('{{ form.epic.id_for_label }}');
+        
+        // Store original epic options
+        const originalOptions = Array.from(epicSelect.options);
+        
+        // Function to filter epics based on project
+        function filterEpics() {
+            // This would require AJAX to get epics for selected project
+            // For now, we'll just show all epics
+            // In a real implementation, you'd make an AJAX call to get filtered epics
+        }
+        
+        // Auto-focus on the first form field
+        const firstInput = document.querySelector('form select, form input:not([type="hidden"]), form textarea');
+        if (firstInput) {
+            firstInput.focus();
+        }
+        
+        // Form submission loading state
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function() {
+            const submitButton = this.querySelector('button[type="submit"]');
+            const originalText = submitButton.innerHTML;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+            submitButton.disabled = true;
+            
+            // Re-enable button after 5 seconds as fallback
+            setTimeout(function() {
+                submitButton.innerHTML = originalText;
+                submitButton.disabled = false;
+            }, 5000);
+        });
+        
+        // Character count for text areas
+        const textAreas = document.querySelectorAll('textarea');
+        textAreas.forEach(function(textArea) {
+            const maxLength = textArea.getAttribute('maxlength');
+            if (maxLength) {
+                const charCountDiv = document.createElement('div');
+                charCountDiv.className = 'form-text text-end';
+                charCountDiv.id = textArea.id + '_count';
+                textArea.parentNode.appendChild(charCountDiv);
+                
+                function updateCharCount() {
+                    const remaining = maxLength - textArea.value.length;
+                    charCountDiv.textContent = `${textArea.value.length}/${maxLength} characters`;
+                    charCountDiv.className = remaining < 50 ? 'form-text text-end text-warning' : 'form-text text-end text-muted';
+                }
+                
+                textArea.addEventListener('input', updateCharCount);
+                updateCharCount();
+            }
+        });
+        
+        // Story points validation
+        const storyPointsInput = document.getElementById('{{ form.story_points.id_for_label }}');
+        if (storyPointsInput) {
+            storyPointsInput.addEventListener('input', function() {
+                const value = parseInt(this.value);
+                if (value && (value < 1 || value > 100)) {
+                    this.setCustomValidity('Story points must be between 1 and 100');
+                } else {
+                    this.setCustomValidity('');
+                }
+            });
+        }
+        
+        // Enhanced validation feedback
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function(e) {
+            const requiredFields = form.querySelectorAll('[required]');
+            let firstInvalidField = null;
+            
+            requiredFields.forEach(function(field) {
+                if (!field.value.trim()) {
+                    field.classList.add('is-invalid');
+                    if (!firstInvalidField) {
+                        firstInvalidField = field;
+                    }
+                } else {
+                    field.classList.remove('is-invalid');
+                }
+            });
+            
+            if (firstInvalidField) {
+                e.preventDefault();
+                firstInvalidField.focus();
+                firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+    });
+</script>
+{% endblock %}

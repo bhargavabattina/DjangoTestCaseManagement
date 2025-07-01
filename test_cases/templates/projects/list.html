@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Projects - Test Case Management{% endblock %}
+
+{% block nav_projects %}active{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Projects</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Projects</h1>
+    <a href="{% url 'test_cases:project_create' %}" class="btn btn-primary">
+        <i class="fas fa-plus"></i> New Project
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Search and Filter Section -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-6">
+                <label for="search" class="form-label">Search Projects</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" 
+                           class="form-control" 
+                           id="search" 
+                           name="search" 
+                           value="{{ search_query }}" 
+                           placeholder="Search by name or description...">
+                </div>
+            </div>
+            <div class="col-md-6 d-flex align-items-end">
+                <button type="submit" class="btn btn-outline-primary me-2">
+                    <i class="fas fa-search"></i> Search
+                </button>
+                <a href="{% url 'test_cases:project_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Projects Table -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">All Projects</h5>
+    </div>
+    <div class="card-body">
+        {% if projects %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Created Date</th>
+                            <th scope="col" width="200">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for project in projects %}
+                            <tr>
+                                <td>
+                                    <strong>{{ project.name }}</strong>
+                                </td>
+                                <td>
+                                    <div class="text-truncate" style="max-width: 300px;" title="{{ project.description }}">
+                                        {{ project.description|default:"No description" }}
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if project.status == 'active' %}success{% elif project.status == 'completed' %}primary{% else %}secondary{% endif %}">
+                                        {{ project.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <small>{{ project.created_date|date:"M d, Y H:i" }}</small>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{% url 'test_cases:project_edit' project.pk %}" 
+                                           class="btn btn-sm btn-outline-primary" 
+                                           title="Edit Project">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-danger" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#deleteModal{{ project.pk }}"
+                                                title="Delete Project">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            {% if projects.has_other_pages %}
+                <nav aria-label="Projects pagination" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        {% if projects.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}">
+                                    <i class="fas fa-angle-double-left"></i>
+                                </a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ projects.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}">
+                                    <i class="fas fa-angle-left"></i>
+                                </a>
+                            </li>
+                        {% endif %}
+                        
+                        {% for num in projects.paginator.page_range %}
+                            {% if projects.number == num %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ num }}</span>
+                                </li>
+                            {% elif num > projects.number|add:'-3' and num < projects.number|add:'3' %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}">{{ num }}</a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if projects.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ projects.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}">
+                                    <i class="fas fa-angle-right"></i>
+                                </a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ projects.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}">
+                                    <i class="fas fa-angle-double-right"></i>
+                                </a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                
+                <div class="text-center text-muted small">
+                    Showing {{ projects.start_index }} to {{ projects.end_index }} of {{ projects.paginator.count }} projects
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-project-diagram fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No Projects Found</h5>
+                {% if search_query %}
+                    <p class="text-muted">No projects match your search criteria.</p>
+                    <a href="{% url 'test_cases:project_list' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-times"></i> Clear Search
+                    </a>
+                {% else %}
+                    <p class="text-muted">Get started by creating your first project.</p>
+                    <a href="{% url 'test_cases:project_create' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Create Project
+                    </a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Delete Confirmation Modals -->
+{% for project in projects %}
+    <div class="modal fade" id="deleteModal{{ project.pk }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ project.pk }}" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteModalLabel{{ project.pk }}">Delete Project</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete the project <strong>"{{ project.name }}"</strong>?</p>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Warning:</strong> This will also delete all associated epics, user stories, and test cases. This action cannot be undone.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form method="post" action="{% url 'test_cases:project_delete' project.pk %}" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> Delete Project
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endfor %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-submit search form on Enter key
+    document.getElementById('search').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            this.form.submit();
+        }
+    });
+    
+    // Highlight search terms in results
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchTerm = '{{ search_query|escapejs }}';
+        if (searchTerm) {
+            const tableRows = document.querySelectorAll('tbody tr');
+            tableRows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                cells.forEach(cell => {
+                    if (cell.textContent.toLowerCase().includes(searchTerm.toLowerCase())) {
+                        const regex = new RegExp(`(${searchTerm})`, 'gi');
+                        cell.innerHTML = cell.innerHTML.replace(regex, '<mark>$1</mark>');
+                    }
+                });
+            });
+        }
+    });
+</script>
+{% endblock %}

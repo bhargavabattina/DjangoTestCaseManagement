@@ -1,0 +1,681 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if testcase %}Edit Test Case{% else %}Create Test Case{% endif %} - Test Case Management
+{% endblock %}
+
+{% block nav_testcases %}active{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:testcase_list' %}">Test Cases</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+            {% if testcase %}Edit Test Case{% else %}Create Test Case{% endif %}
+        </li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">{% if testcase %}Edit Test Case: {{ testcase.name }}{% else %}Create New Test Case{% endif %}</h1>
+    <a href="{% url 'test_cases:testcase_list' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Test Cases
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            {% if testcase %}
+                <i class="fas fa-edit"></i> Edit Test Case Details
+            {% else %}
+                <i class="fas fa-plus"></i> Test Case Information
+            {% endif %}
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if testcase %}
+        <div class="mb-4 p-3 border-start border-4 border-primary bg-light">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-sitemap text-primary me-2"></i>
+                <h6 class="mb-0">Hierarchical Context:</h6>
+            </div>
+            <div class="d-flex align-items-center flex-wrap">
+                <span class="badge bg-primary me-2">Project</span>
+                <strong>{{ testcase.user_story.epic.project.name }}</strong>
+                <i class="fas fa-angle-right mx-2"></i>
+                <span class="badge bg-success me-2">Epic</span>
+                <strong>{{ testcase.user_story.epic.name }}</strong>
+                <i class="fas fa-angle-right mx-2"></i>
+                <span class="badge bg-info me-2">User Story</span>
+                <strong>{{ testcase.user_story.name }}</strong>
+                <i class="fas fa-angle-right mx-2"></i>
+                <span class="badge bg-warning me-2">Test Case</span>
+                <strong class="ms-2">{{ testcase.name }}</strong>
+            </div>
+        </div>
+        {% endif %}
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            
+            <!-- Hierarchical Selectors -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0"><i class="fas fa-sitemap"></i> Hierarchical Selection</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="project-select" class="form-label">Project *</label>
+                                <select id="project-select" class="form-control" {% if testcase %}disabled{% endif %}>
+                                    <option value="">Select Project...</option>
+                                    <!-- Options will be populated via JavaScript -->
+                                </select>
+                                <div class="form-text">Select the project for this test case.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="epic-select" class="form-label">Epic *</label>
+                                <select id="epic-select" class="form-control" {% if testcase %}disabled{% endif %}>
+                                    <option value="">Select Epic...</option>
+                                    <!-- Options will be populated via JavaScript -->
+                                </select>
+                                <div class="form-text">Select the epic for this test case.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="{{ form.user_story.id_for_label }}" class="form-label">{{ form.user_story.label }} *</label>
+                                {{ form.user_story }}
+                                {% if form.user_story.errors %}
+                                    <div class="text-danger mt-1">
+                                        {% for error in form.user_story.errors %}
+                                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">Select the user story for this test case.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Test Case Details -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0"><i class="fas fa-clipboard-check"></i> Test Case Details</h6>
+                </div>
+                <div class="card-body">
+                    <!-- Test Case Name -->
+                    <div class="mb-3">
+                        <label for="{{ form.name.id_for_label }}" class="form-label">{{ form.name.label }} *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.name.errors %}
+                                    <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">Provide a clear and descriptive name for the test case.</div>
+                    </div>
+                    
+                    <!-- Description with Rich Text Editor -->
+                    <div class="mb-3">
+                        <label for="{{ form.description.id_for_label }}" class="form-label">{{ form.description.label }}</label>
+                        <div id="description-editor" style="height: 150px;"></div>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.description.errors %}
+                                    <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">Provide a detailed description of what this test case covers.</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Test Execution Details -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0"><i class="fas fa-play-circle"></i> Test Execution Details</h6>
+                </div>
+                <div class="card-body">
+                    <!-- Test Steps -->
+                    <div class="mb-3">
+                        <label for="{{ form.test_steps.id_for_label }}" class="form-label">{{ form.test_steps.label }} *</label>
+                        <div id="test-steps-editor" style="height: 200px;"></div>
+                        {{ form.test_steps }}
+                        {% if form.test_steps.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.test_steps.errors %}
+                                    <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">
+                            List the step-by-step instructions to execute this test case. Use numbered or bulleted lists for clarity.
+                        </div>
+                    </div>
+                    
+                    <!-- Expected Results -->
+                    <div class="mb-3">
+                        <label for="{{ form.expected_results.id_for_label }}" class="form-label">{{ form.expected_results.label }} *</label>
+                        <div id="expected-results-editor" style="height: 150px;"></div>
+                        {{ form.expected_results }}
+                        {% if form.expected_results.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.expected_results.errors %}
+                                    <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">
+                            Describe the expected outcome when the test steps are executed correctly.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Test Case Properties -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0"><i class="fas fa-cog"></i> Test Case Properties</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Status and Execution Status -->
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.status.id_for_label }}" class="form-label">{{ form.status.label }}</label>
+                                {{ form.status }}
+                                {% if form.status.errors %}
+                                    <div class="text-danger mt-1">
+                                        {% for error in form.status.errors %}
+                                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">Current development status of the test case.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.execution_status.id_for_label }}" class="form-label">{{ form.execution_status.label }}</label>
+                                {{ form.execution_status }}
+                                {% if form.execution_status.errors %}
+                                    <div class="text-danger mt-1">
+                                        {% for error in form.execution_status.errors %}
+                                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">Current execution status of the test case.</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <!-- Priority -->
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.priority.id_for_label }}" class="form-label">{{ form.priority.label }}</label>
+                                {{ form.priority }}
+                                {% if form.priority.errors %}
+                                    <div class="text-danger mt-1">
+                                        {% for error in form.priority.errors %}
+                                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">Set the priority level for this test case.</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Automated Status -->
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.is_automated.id_for_label }}" class="form-label">{{ form.is_automated.label }}</label>
+                                <div class="form-check">
+                                    {{ form.is_automated }}
+                                    <label class="form-check-label" for="{{ form.is_automated.id_for_label }}">
+                                        This test case is automated
+                                    </label>
+                                </div>
+                                {% if form.is_automated.errors %}
+                                    <div class="text-danger mt-1">
+                                        {% for error in form.is_automated.errors %}
+                                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">Check if this test case can be or is automated.</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Assignment -->
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="mb-3">
+                                <label for="{{ form.assigned_to.id_for_label }}" class="form-label">{{ form.assigned_to.label }}</label>
+                                {{ form.assigned_to }}
+                                {% if form.assigned_to.errors %}
+                                    <div class="text-danger mt-1">
+                                        {% for error in form.assigned_to.errors %}
+                                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">Assign this test case to a team member for execution.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Non-field Errors -->
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    {% for error in form.non_field_errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            <!-- Form Actions -->
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <a href="{% url 'test_cases:testcase_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> 
+                    {% if testcase %}Update Test Case{% else %}Create Test Case{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Test Case Information Card (for edit) -->
+{% if testcase %}
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-info-circle"></i> Test Case Information
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Project:</strong> {{ testcase.user_story.epic.project.name }}</p>
+                <p><strong>Epic:</strong> {{ testcase.user_story.epic.name }}</p>
+                <p><strong>User Story:</strong> {{ testcase.user_story.name }}</p>
+                <p><strong>Created By:</strong> {{ testcase.created_by.get_full_name|default:testcase.created_by.username }}</p>
+                <p><strong>Created Date:</strong> {{ testcase.created_date|date:"F j, Y, g:i a" }}</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Status:</strong> 
+                    <span class="badge bg-{% if testcase.status == 'draft' %}secondary{% elif testcase.status == 'ready' %}success{% else %}warning{% endif %}">
+                        {{ testcase.get_status_display }}
+                    </span>
+                </p>
+                <p><strong>Execution Status:</strong> 
+                    <span class="badge bg-{% if testcase.execution_status == 'not_executed' %}secondary{% elif testcase.execution_status == 'passed' %}success{% elif testcase.execution_status == 'failed' %}danger{% else %}warning{% endif %}">
+                        {{ testcase.get_execution_status_display }}
+                    </span>
+                </p>
+                <p><strong>Priority:</strong> 
+                    <span class="badge bg-{% if testcase.priority == 'low' %}secondary{% elif testcase.priority == 'medium' %}info{% elif testcase.priority == 'high' %}warning{% else %}danger{% endif %}">
+                        {{ testcase.get_priority_display }}
+                    </span>
+                </p>
+                <p><strong>Last Updated:</strong> {{ testcase.updated_date|date:"F j, Y, g:i a" }}</p>
+                <p><strong>Last Executed:</strong> {{ testcase.last_executed|date:"F j, Y, g:i a"|default:"Never" }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<!-- Quill Rich Text Editor CSS -->
+<link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+<style>
+    .ql-editor {
+        min-height: 100px;
+    }
+    .form-control[style*="display: none"] {
+        display: none !important;
+    }
+    .hierarchical-selector {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    .priority-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    .priority-low { background-color: #6c757d; }
+    .priority-medium { background-color: #17a2b8; }
+    .priority-high { background-color: #ffc107; }
+    .priority-critical { background-color: #dc3545; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Quill Rich Text Editor JS -->
+<script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Quill editors
+    const descriptionEditor = new Quill('#description-editor', {
+        theme: 'snow',
+        placeholder: 'Enter test case description...',
+        modules: {
+            toolbar: [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                [{ 'color': [] }, { 'background': [] }],
+                ['link', 'code-block'],
+                ['clean']
+            ]
+        }
+    });
+
+    const testStepsEditor = new Quill('#test-steps-editor', {
+        theme: 'snow',
+        placeholder: 'Enter step-by-step test instructions...',
+        modules: {
+            toolbar: [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline'],
+                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                [{ 'color': [] }],
+                ['link', 'code-block'],
+                ['clean']
+            ]
+        }
+    });
+
+    const expectedResultsEditor = new Quill('#expected-results-editor', {
+        theme: 'snow',
+        placeholder: 'Enter expected results...',
+        modules: {
+            toolbar: [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline'],
+                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                [{ 'color': [] }],
+                ['link'],
+                ['clean']
+            ]
+        }
+    });
+
+    // Set initial content from form fields
+    const descriptionField = document.getElementById('{{ form.description.id_for_label }}');
+    const testStepsField = document.getElementById('{{ form.test_steps.id_for_label }}');
+    const expectedResultsField = document.getElementById('{{ form.expected_results.id_for_label }}');
+
+    if (descriptionField.value) {
+        descriptionEditor.root.innerHTML = descriptionField.value;
+    }
+    if (testStepsField.value) {
+        testStepsEditor.root.innerHTML = testStepsField.value;
+    }
+    if (expectedResultsField.value) {
+        expectedResultsEditor.root.innerHTML = expectedResultsField.value;
+    }
+
+    // Hide original textareas
+    descriptionField.style.display = 'none';
+    testStepsField.style.display = 'none';
+    expectedResultsField.style.display = 'none';
+
+    // Update hidden fields when editor content changes
+    descriptionEditor.on('text-change', function() {
+        descriptionField.value = descriptionEditor.root.innerHTML;
+    });
+
+    testStepsEditor.on('text-change', function() {
+        testStepsField.value = testStepsEditor.root.innerHTML;
+    });
+
+    expectedResultsEditor.on('text-change', function() {
+        expectedResultsField.value = expectedResultsEditor.root.innerHTML;
+    });
+
+    // Hierarchical dropdown functionality
+    const projectSelect = document.getElementById('project-select');
+    const epicSelect = document.getElementById('epic-select');
+    const userStorySelect = document.getElementById('{{ form.user_story.id_for_label }}');
+
+    // Populate project dropdown (if not editing)
+    {% if not testcase %}
+    function populateProjects() {
+        // In a real implementation, you'd fetch this data via AJAX
+        // For now, we'll populate from the existing user story options
+        const projects = new Map();
+        Array.from(userStorySelect.options).forEach(option => {
+            if (option.value) {
+                const parts = option.textContent.split(' - ');
+                if (parts.length >= 3) {
+                    const projectName = parts[0];
+                    projects.set(projectName, projectName);
+                }
+            }
+        });
+        
+        projects.forEach((value, key) => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = key;
+            projectSelect.appendChild(option);
+        });
+    }
+    
+    function populateEpics(projectName) {
+        epicSelect.innerHTML = '<option value="">Select Epic...</option>';
+        userStorySelect.innerHTML = '<option value="">Select User Story...</option>';
+        
+        if (!projectName) return;
+        
+        const epics = new Map();
+        Array.from(userStorySelect.options).forEach(option => {
+            if (option.value) {
+                const parts = option.textContent.split(' - ');
+                if (parts.length >= 3 && parts[0] === projectName) {
+                    const epicName = parts[1];
+                    epics.set(epicName, epicName);
+                }
+            }
+        });
+        
+        epics.forEach((value, key) => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = key;
+            epicSelect.appendChild(option);
+        });
+    }
+    
+    function populateUserStories(projectName, epicName) {
+        userStorySelect.innerHTML = '<option value="">Select User Story...</option>';
+        
+        if (!projectName || !epicName) return;
+        
+        // Store original options for restoration
+        const originalOptions = Array.from(userStorySelect.querySelectorAll('option[value]'));
+        
+        originalOptions.forEach(option => {
+            const parts = option.textContent.split(' - ');
+            if (parts.length >= 3 && parts[0] === projectName && parts[1] === epicName) {
+                userStorySelect.appendChild(option);
+            }
+        });
+    }
+    
+    // Event listeners for hierarchical selection
+    projectSelect.addEventListener('change', function() {
+        populateEpics(this.value);
+    });
+    
+    epicSelect.addEventListener('change', function() {
+        const projectName = projectSelect.value;
+        populateUserStories(projectName, this.value);
+    });
+    
+    // Initialize project dropdown
+    populateProjects();
+    
+    // Pre-select values if editing
+    {% if testcase %}
+    projectSelect.value = '{{ testcase.user_story.epic.project.name|escapejs }}';
+    epicSelect.innerHTML = '<option value="{{ testcase.user_story.epic.name|escapejs }}">{{ testcase.user_story.epic.name|escapejs }}</option>';
+    epicSelect.value = '{{ testcase.user_story.epic.name|escapejs }}';
+    {% endif %}
+    {% endif %}
+
+    // Form validation and submission
+    const form = document.querySelector('form');
+    form.addEventListener('submit', function(e) {
+        // Update hidden fields before submission
+        descriptionField.value = descriptionEditor.root.innerHTML;
+        testStepsField.value = testStepsEditor.root.innerHTML;
+        expectedResultsField.value = expectedResultsEditor.root.innerHTML;
+        
+        // Validate required fields
+        const requiredFields = [
+            { field: userStorySelect, name: 'User Story' },
+            { field: document.getElementById('{{ form.name.id_for_label }}'), name: 'Test Case Name' },
+            { field: testStepsField, name: 'Test Steps' },
+            { field: expectedResultsField, name: 'Expected Results' }
+        ];
+        
+        let firstInvalidField = null;
+        let isValid = true;
+        
+        requiredFields.forEach(({field, name}) => {
+            if (!field.value.trim()) {
+                field.classList.add('is-invalid');
+                if (!firstInvalidField) {
+                    firstInvalidField = field;
+                }
+                isValid = false;
+            } else {
+                field.classList.remove('is-invalid');
+            }
+        });
+        
+        if (!isValid) {
+            e.preventDefault();
+            if (firstInvalidField) {
+                firstInvalidField.focus();
+                firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            return false;
+        }
+        
+        // Show loading state
+        const submitButton = this.querySelector('button[type="submit"]');
+        const originalText = submitButton.innerHTML;
+        submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+        submitButton.disabled = true;
+        
+        // Re-enable button after 10 seconds as fallback
+        setTimeout(function() {
+            submitButton.innerHTML = originalText;
+            submitButton.disabled = false;
+        }, 10000);
+    });
+
+    // Priority indicator
+    const prioritySelect = document.getElementById('{{ form.priority.id_for_label }}');
+    if (prioritySelect) {
+        function updatePriorityIndicator() {
+            const priority = prioritySelect.value;
+            const label = prioritySelect.parentNode.querySelector('label');
+            
+            // Remove existing indicators
+            const existingIndicator = label.querySelector('.priority-indicator');
+            if (existingIndicator) {
+                existingIndicator.remove();
+            }
+            
+            // Add new indicator
+            if (priority) {
+                const indicator = document.createElement('span');
+                indicator.className = `priority-indicator priority-${priority}`;
+                label.insertBefore(indicator, label.firstChild);
+            }
+        }
+        
+        prioritySelect.addEventListener('change', updatePriorityIndicator);
+        updatePriorityIndicator(); // Initial call
+    }
+
+    // Auto-focus on the first form field
+    const firstInput = document.querySelector('form select:not([disabled]), form input:not([type="hidden"]):not([disabled])');
+    if (firstInput) {
+        firstInput.focus();
+    }
+
+    // Character count for name field
+    const nameField = document.getElementById('{{ form.name.id_for_label }}');
+    if (nameField) {
+        const maxLength = 200; // Assuming max length from model
+        const charCountDiv = document.createElement('div');
+        charCountDiv.className = 'form-text text-end';
+        charCountDiv.id = nameField.id + '_count';
+        nameField.parentNode.appendChild(charCountDiv);
+        
+        function updateCharCount() {
+            const remaining = maxLength - nameField.value.length;
+            charCountDiv.textContent = `${nameField.value.length}/${maxLength} characters`;
+            charCountDiv.className = remaining < 20 ? 'form-text text-end text-warning' : 'form-text text-end text-muted';
+        }
+        
+        nameField.addEventListener('input', updateCharCount);
+        updateCharCount();
+    }
+
+    // Enhanced validation feedback
+    document.querySelectorAll('input, select, textarea').forEach(field => {
+        field.addEventListener('blur', function() {
+            if (this.hasAttribute('required') && !this.value.trim()) {
+                this.classList.add('is-invalid');
+            } else {
+                this.classList.remove('is-invalid');
+            }
+        });
+        
+        field.addEventListener('input', function() {
+            if (this.classList.contains('is-invalid') && this.value.trim()) {
+                this.classList.remove('is-invalid');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

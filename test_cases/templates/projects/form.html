@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if project %}Edit Project{% else %}Create Project{% endif %} - Test Case Management
+{% endblock %}
+
+{% block nav_projects %}active{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:project_list' %}">Projects</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+            {% if project %}Edit Project{% else %}Create Project{% endif %}
+        </li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">{% if project %}Edit Project: {{ project.name }}{% else %}Create New Project{% endif %}</h1>
+    <a href="{% url 'test_cases:project_list' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Projects
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            {% if project %}
+                <i class="fas fa-edit"></i> Edit Project Details
+            {% else %}
+                <i class="fas fa-plus"></i> Project Information
+            {% endif %}
+        </h5>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            
+            <!-- Form Fields -->
+            <div class="mb-3">
+                <label for="{{ form.name.id_for_label }}" class="form-label">{{ form.name.label }} *</label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.name.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if form.name.help_text %}
+                    <div class="form-text">{{ form.name.help_text }}</div>
+                {% endif %}
+            </div>
+            
+            <div class="mb-3">
+                <label for="{{ form.description.id_for_label }}" class="form-label">{{ form.description.label }}</label>
+                {{ form.description }}
+                {% if form.description.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.description.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if form.description.help_text %}
+                    <div class="form-text">{{ form.description.help_text }}</div>
+                {% endif %}
+            </div>
+            
+            <div class="mb-3">
+                <label for="{{ form.status.id_for_label }}" class="form-label">{{ form.status.label }}</label>
+                {{ form.status }}
+                {% if form.status.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.status.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if form.status.help_text %}
+                    <div class="form-text">{{ form.status.help_text }}</div>
+                {% endif %}
+            </div>
+            
+            <!-- Non-field Errors -->
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    {% for error in form.non_field_errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            <!-- Form Actions -->
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <a href="{% url 'test_cases:project_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> 
+                    {% if project %}Update Project{% else %}Create Project{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Project Information Card (for edit) -->
+{% if project %}
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-info-circle"></i> Project Information
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Created By:</strong> {{ project.created_by.get_full_name|default:project.created_by.username }}</p>
+                <p><strong>Created Date:</strong> {{ project.created_date|date:"F j, Y, g:i a" }}</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Last Updated:</strong> {{ project.updated_date|date:"F j, Y, g:i a" }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Add Bootstrap classes to form elements
+    document.addEventListener('DOMContentLoaded', function() {
+        // Highlight required fields
+        const requiredFields = document.querySelectorAll('label:contains("*")');
+        requiredFields.forEach(field => {
+            field.classList.add('required-field');
+        });
+        
+        // Auto-focus on the first form field
+        const firstInput = document.querySelector('form input:not([type="hidden"]), form textarea, form select');
+        if (firstInput) {
+            firstInput.focus();
+        }
+        
+        // Form submission loading state
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function() {
+            const submitButton = this.querySelector('button[type="submit"]');
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+            submitButton.disabled = true;
+        });
+    });
+</script>
+{% endblock %}

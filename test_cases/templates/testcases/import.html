@@ -1,0 +1,507 @@
+{% extends "base.html" %}
+
+{% block title %}Import Test Cases - Test Case Management{% endblock %}
+
+{% block nav_import %}active{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:testcase_list' %}">Test Cases</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Import Test Cases</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Import Test Cases from Excel</h1>
+    <a href="{% url 'test_cases:testcase_list' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Test Cases
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Import Instructions Card -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-info-circle"></i> Excel Import Instructions
+        </h5>
+    </div>
+    <div class="card-body">
+        <p>Follow these steps to import test cases from an Excel file:</p>
+        <ol>
+            <li>
+                <strong>Prepare your Excel file</strong> with the following columns:
+                <ul class="mt-2">
+                    <li><code>Test Case Name</code> (Required) - The name of the test case</li>
+                    <li><code>Description</code> (Optional) - A detailed description of the test case</li>
+                    <li><code>Test Steps</code> (Required) - Step-by-step instructions for executing the test</li>
+                    <li><code>Expected Results</code> (Required) - The expected outcome when test steps are executed</li>
+                    <li><code>Priority</code> (Optional) - Test case priority: low, medium, high, or critical (defaults to medium)</li>
+                    <li><code>Is Automated</code> (Optional) - Whether the test case is automated: True/False, Yes/No, or 1/0 (defaults to False)</li>
+                </ul>
+            </li>
+            <li><strong>Select the hierarchical placement</strong> (Project, Epic, and User Story) for the imported test cases</li>
+            <li><strong>Upload your Excel file</strong> (.xlsx or .xls format, max 10MB)</li>
+            <li><strong>Click Import</strong> to process the file</li>
+        </ol>
+
+        <div class="alert alert-info">
+            <i class="fas fa-lightbulb"></i> 
+            <strong>Tip:</strong> You can <a href="#" id="download-sample-btn" class="alert-link">download a sample Excel template</a> to get started quickly.
+        </div>
+
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong>Important:</strong> 
+            <ul class="mb-0">
+                <li>The first row of your Excel file must contain the column headers exactly as listed above.</li>
+                <li>Test Case Name, Test Steps, and Expected Results are required fields.</li>
+                <li>All imported test cases will be associated with the selected User Story.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Excel Upload Form -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-file-upload"></i> Upload Excel File
+        </h5>
+    </div>
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data" id="excel-upload-form" novalidate>
+            {% csrf_token %}
+
+            <!-- Hierarchical Selection -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0"><i class="fas fa-sitemap"></i> Hierarchical Selection</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="{{ form.project.id_for_label }}" class="form-label">{{ form.project.label }} *</label>
+                            {{ form.project }}
+                            {% if form.project.errors %}
+                                <div class="text-danger mt-1">
+                                    {% for error in form.project.errors %}
+                                        <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="form-text">{{ form.project.help_text }}</div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="{{ form.epic.id_for_label }}" class="form-label">{{ form.epic.label }} *</label>
+                            {{ form.epic }}
+                            {% if form.epic.errors %}
+                                <div class="text-danger mt-1">
+                                    {% for error in form.epic.errors %}
+                                        <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="form-text">{{ form.epic.help_text }}</div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="{{ form.user_story.id_for_label }}" class="form-label">{{ form.user_story.label }} *</label>
+                            {{ form.user_story }}
+                            {% if form.user_story.errors %}
+                                <div class="text-danger mt-1">
+                                    {% for error in form.user_story.errors %}
+                                        <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="form-text">{{ form.user_story.help_text }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Upload -->
+            <div class="mb-4">
+                <label for="{{ form.excel_file.id_for_label }}" class="form-label">{{ form.excel_file.label }} *</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="fas fa-file-excel"></i>
+                    </span>
+                    {{ form.excel_file }}
+                </div>
+                {% if form.excel_file.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.excel_file.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <div class="form-text">{{ form.excel_file.help_text }}</div>
+            </div>
+
+            <!-- Non-field Errors -->
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    {% for error in form.non_field_errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <!-- Form Actions -->
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <a href="{% url 'test_cases:testcase_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+                <button type="submit" id="import-button" class="btn btn-primary">
+                    <i class="fas fa-file-import"></i> Import Test Cases
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Progress and Results Section (initially hidden) -->
+<div id="import-progress-section" class="card mt-4" style="display: none;">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-tasks"></i> Import Progress
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="progress mb-4">
+            <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+        </div>
+        
+        <div id="import-status" class="text-center mb-3">
+            <h5 id="import-status-text">Processing...</h5>
+            <div id="import-spinner" class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+
+        <div id="import-results" style="display: none;">
+            <div id="success-message" class="alert alert-success" style="display: none;">
+                <i class="fas fa-check-circle"></i>
+                <span id="success-text"></span>
+            </div>
+            
+            <div id="warning-message" class="alert alert-warning" style="display: none;">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span id="warning-text"></span>
+            </div>
+            
+            <div id="error-message" class="alert alert-danger" style="display: none;">
+                <i class="fas fa-times-circle"></i>
+                <span id="error-text"></span>
+            </div>
+            
+            <div id="error-details" class="mt-3" style="display: none;">
+                <h6><i class="fas fa-list"></i> Error Details:</h6>
+                <div class="card">
+                    <div class="card-body bg-light">
+                        <ul id="error-list" class="mb-0">
+                            <!-- Error items will be added here dynamically -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-center mt-4">
+                <a href="{% url 'test_cases:testcase_list' %}" class="btn btn-outline-primary me-2">
+                    <i class="fas fa-list"></i> View All Test Cases
+                </a>
+                <button id="import-another-btn" class="btn btn-primary">
+                    <i class="fas fa-file-import"></i> Import Another File
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sample Excel Modal -->
+<div class="modal fade" id="sampleExcelModal" tabindex="-1" aria-labelledby="sampleExcelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sampleExcelModalLabel">Sample Excel Template</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>The sample Excel file contains the following example test cases:</p>
+                
+                <div class="table-responsive">
+                    <table class="table table-bordered table-striped">
+                        <thead>
+                            <tr>
+                                <th>Test Case Name</th>
+                                <th>Description</th>
+                                <th>Test Steps</th>
+                                <th>Expected Results</th>
+                                <th>Priority</th>
+                                <th>Is Automated</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Login with valid credentials</td>
+                                <td>Test successful login with valid username and password</td>
+                                <td>1. Navigate to login page<br>2. Enter valid username<br>3. Enter valid password<br>4. Click login button</td>
+                                <td>User should be successfully logged in and redirected to dashboard</td>
+                                <td>high</td>
+                                <td>False</td>
+                            </tr>
+                            <tr>
+                                <td>Login with invalid credentials</td>
+                                <td>Test login failure with invalid credentials</td>
+                                <td>1. Navigate to login page<br>2. Enter invalid username<br>3. Enter invalid password<br>4. Click login button</td>
+                                <td>Error message should be displayed and user should remain on login page</td>
+                                <td>medium</td>
+                                <td>True</td>
+                            </tr>
+                            <tr>
+                                <td>Password reset functionality</td>
+                                <td>Test password reset feature</td>
+                                <td>1. Click forgot password link<br>2. Enter email address<br>3. Click submit<br>4. Check email for reset link</td>
+                                <td>Password reset email should be sent with valid reset link</td>
+                                <td>low</td>
+                                <td>False</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="#" id="download-template-btn" class="btn btn-primary">
+                    <i class="fas fa-download"></i> Download Template
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Dynamic form handling
+        const projectSelect = document.getElementById('{{ form.project.id_for_label }}');
+        const epicSelect = document.getElementById('{{ form.epic.id_for_label }}');
+        const userStorySelect = document.getElementById('{{ form.user_story.id_for_label }}');
+        
+        // Store original epic and user story options
+        const originalEpicOptions = Array.from(epicSelect.options);
+        const originalStoryOptions = Array.from(userStorySelect.options);
+        
+        // Update epic options based on selected project
+        projectSelect.addEventListener('change', function() {
+            const projectId = this.value;
+            
+            // Clear and reset epic dropdown
+            epicSelect.innerHTML = '<option value="">Select Epic...</option>';
+            
+            if (projectId) {
+                // Filter epics for the selected project
+                originalEpicOptions.forEach(option => {
+                    const epicOption = option.cloneNode(true);
+                    if (epicOption.getAttribute('data-project') === projectId) {
+                        epicSelect.appendChild(epicOption);
+                    }
+                });
+                
+                // Trigger epic change to update user stories
+                epicSelect.dispatchEvent(new Event('change'));
+            }
+        });
+        
+        // Update user story options based on selected epic
+        epicSelect.addEventListener('change', function() {
+            const epicId = this.value;
+            
+            // Clear and reset user story dropdown
+            userStorySelect.innerHTML = '<option value="">Select User Story...</option>';
+            
+            if (epicId) {
+                // Filter user stories for the selected epic
+                originalStoryOptions.forEach(option => {
+                    const storyOption = option.cloneNode(true);
+                    if (storyOption.getAttribute('data-epic') === epicId) {
+                        userStorySelect.appendChild(storyOption);
+                    }
+                });
+            }
+        });
+        
+        // Form submission and progress simulation
+        const uploadForm = document.getElementById('excel-upload-form');
+        const importButton = document.getElementById('import-button');
+        const progressSection = document.getElementById('import-progress-section');
+        const progressBar = document.getElementById('progress-bar');
+        const importStatus = document.getElementById('import-status');
+        const importSpinner = document.getElementById('import-spinner');
+        const importResults = document.getElementById('import-results');
+        
+        // Handle form submission
+        uploadForm.addEventListener('submit', function(e) {
+            // Validate required fields
+            const requiredFields = [
+                { field: projectSelect, name: 'Project' },
+                { field: epicSelect, name: 'Epic' },
+                { field: userStorySelect, name: 'User Story' },
+                { field: document.getElementById('{{ form.excel_file.id_for_label }}'), name: 'Excel File' }
+            ];
+            
+            let isValid = true;
+            let firstInvalidField = null;
+            
+            requiredFields.forEach(({field, name}) => {
+                if (!field.value) {
+                    field.classList.add('is-invalid');
+                    if (!firstInvalidField) {
+                        firstInvalidField = field;
+                    }
+                    isValid = false;
+                } else {
+                    field.classList.remove('is-invalid');
+                }
+            });
+            
+            if (!isValid) {
+                e.preventDefault();
+                if (firstInvalidField) {
+                    firstInvalidField.focus();
+                }
+                return false;
+            }
+            
+            // If using AJAX submission, prevent default form submission
+            // e.preventDefault();
+            
+            // Show progress section and disable submit button
+            importButton.disabled = true;
+            importButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Importing...';
+            progressSection.style.display = 'block';
+            
+            // Simulate progress (in a real implementation, this would be updated via AJAX)
+            // This is just for demonstration - in a real app, you'd use AJAX to track real progress
+            simulateProgress();
+            
+            // Allow the form to submit normally (this will be replaced with AJAX in a real implementation)
+            return true;
+        });
+        
+        // Simulate import progress (for demonstration purposes)
+        function simulateProgress() {
+            let progress = 0;
+            const interval = setInterval(function() {
+                progress += Math.floor(Math.random() * 15) + 5;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    
+                    // In a real implementation, you would check the server response here
+                    // For now, we'll simulate a successful import after a delay
+                    setTimeout(function() {
+                        showResults();
+                    }, 1000);
+                }
+                
+                progressBar.style.width = progress + '%';
+                progressBar.setAttribute('aria-valuenow', progress);
+                progressBar.textContent = progress + '%';
+            }, 500);
+        }
+        
+        // Show import results
+        function showResults() {
+            // Hide progress indicators
+            importStatus.style.display = 'none';
+            importSpinner.style.display = 'none';
+            
+            // Show results
+            importResults.style.display = 'block';
+            
+            // For demonstration, we'll show a success message
+            // In a real implementation, you would check the server response
+            const successMessage = document.getElementById('success-message');
+            const successText = document.getElementById('success-text');
+            successMessage.style.display = 'block';
+            successText.textContent = 'Successfully imported 3 test cases!';
+            
+            // Example of showing warnings (if needed)
+            // const warningMessage = document.getElementById('warning-message');
+            // const warningText = document.getElementById('warning-text');
+            // warningMessage.style.display = 'block';
+            // warningText.textContent = 'Skipped 2 rows due to validation errors.';
+            
+            // Example of showing errors (if needed)
+            // const errorMessage = document.getElementById('error-message');
+            // const errorText = document.getElementById('error-text');
+            // const errorDetails = document.getElementById('error-details');
+            // const errorList = document.getElementById('error-list');
+            // errorMessage.style.display = 'block';
+            // errorText.textContent = 'Import completed with 2 errors.';
+            // errorDetails.style.display = 'block';
+            // errorList.innerHTML = '<li>Row 3: Test Case Name is required</li><li>Row 5: Expected Results must be at least 10 characters long</li>';
+        }
+        
+        // Import another file button
+        document.getElementById('import-another-btn').addEventListener('click', function() {
+            // Reset form and hide progress/results
+            uploadForm.reset();
+            progressSection.style.display = 'none';
+            importButton.disabled = false;
+            importButton.innerHTML = '<i class="fas fa-file-import"></i> Import Test Cases';
+            
+            // Reset progress bar
+            progressBar.style.width = '0%';
+            progressBar.setAttribute('aria-valuenow', 0);
+            progressBar.textContent = '0%';
+            
+            // Show progress indicators again
+            importStatus.style.display = 'block';
+            importSpinner.style.display = 'block';
+            
+            // Hide results
+            importResults.style.display = 'none';
+            document.getElementById('success-message').style.display = 'none';
+            document.getElementById('warning-message').style.display = 'none';
+            document.getElementById('error-message').style.display = 'none';
+            document.getElementById('error-details').style.display = 'none';
+        });
+        
+        // Sample Excel template handling
+        const downloadSampleBtn = document.getElementById('download-sample-btn');
+        const downloadTemplateBtn = document.getElementById('download-template-btn');
+        const sampleExcelModal = new bootstrap.Modal(document.getElementById('sampleExcelModal'));
+        
+        downloadSampleBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            sampleExcelModal.show();
+        });
+        
+        downloadTemplateBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            // In a real implementation, this would be a link to download the sample Excel file
+            // For now, we'll just show an alert
+            alert('In a real implementation, this would download the Excel template. This would be handled by a server endpoint that generates the sample Excel file.');
+        });
+        
+        // Enhanced form validation
+        document.querySelectorAll('select, input').forEach(field => {
+            field.addEventListener('change', function() {
+                if (this.value) {
+                    this.classList.remove('is-invalid');
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
