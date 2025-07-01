@@ -134,9 +134,7 @@ dmypy.json
 .pyre/
 
 # Django specific
-media/
-staticfiles/
-static/
+
 *.sqlite3
 .env
 local_settings.py
