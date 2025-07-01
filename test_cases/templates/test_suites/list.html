@@ -1,0 +1,623 @@
+{% extends 'base.html' %}
+
+{% block title %}Test Suites - Test Case Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Test Suites</h2>
+                <div>
+                    <a href="{% url 'test_cases:test_suite_create' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Create Test Suite
+                    </a>
+                    <button id="bulk-actions-btn" class="btn btn-secondary" style="display: none;">
+                        <i class="fas fa-tasks"></i> Bulk Actions
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filter Panel -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-4">
+                            <label for="search" class="form-label">Search</label>
+                            <input type="text" class="form-control" id="search" name="search" 
+                                   value="{{ search_query }}" placeholder="Search suites...">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="project" class="form-label">Project</label>
+                            <select class="form-control" id="project" name="project">
+                                <option value="">All Projects</option>
+                                {% for project in projects %}
+                                    <option value="{{ project.id }}" {% if selected_project == project.id|stringformat:"s" %}selected{% endif %}>
+                                        {{ project.name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="epic" class="form-label">Epic</label>
+                            <select class="form-control" id="epic" name="epic">
+                                <option value="">All Epics</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary me-2">
+                                <i class="fas fa-search"></i> Filter
+                            </button>
+                            <a href="{% url 'test_cases:test_suite_list' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Clear
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Bulk Actions Panel -->
+            <div id="bulk-actions-panel" class="card mb-3" style="display: none;">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label for="bulk-execute" class="form-label">Execute Suites</label>
+                            <button id="bulk-execute-btn" class="btn btn-success w-100">
+                                <i class="fas fa-play"></i> Execute Selected
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="bulk-delete" class="form-label">Delete Suites</label>
+                            <button id="bulk-delete-btn" class="btn btn-danger w-100">
+                                <i class="fas fa-trash"></i> Delete Selected
+                            </button>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button id="cancel-bulk-actions" class="btn btn-secondary w-100">
+                                <i class="fas fa-times"></i> Cancel
+                            </button>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end justify-content-end">
+                            <span id="selected-count" class="text-muted">0 items selected</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Suites Table -->
+            <div class="card">
+                <div class="card-body">
+                    {% if test_suites %}
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th style="width: 40px;">
+                                            <input type="checkbox" id="header-select-all" class="form-check-input">
+                                        </th>
+                                        <th>
+                                            <a href="?{% if request.GET.search %}search={{ request.GET.search }}&{% endif %}{% if selected_project %}project={{ selected_project }}&{% endif %}sort=name{% if request.GET.sort == 'name' and request.GET.order != 'desc' %}&order=desc{% endif %}" class="text-white text-decoration-none">
+                                                Suite Name
+                                                {% if request.GET.sort == 'name' %}
+                                                    {% if request.GET.order == 'desc' %}
+                                                        <i class="fas fa-sort-down"></i>
+                                                    {% else %}
+                                                        <i class="fas fa-sort-up"></i>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <i class="fas fa-sort"></i>
+                                                {% endif %}
+                                            </a>
+                                        </th>
+                                        <th>Description</th>
+                                        <th>
+                                            <a href="?{% if request.GET.search %}search={{ request.GET.search }}&{% endif %}{% if selected_project %}project={{ selected_project }}&{% endif %}sort=test_cases_count{% if request.GET.sort == 'test_cases_count' and request.GET.order != 'desc' %}&order=desc{% endif %}" class="text-white text-decoration-none">
+                                                Test Cases
+                                                {% if request.GET.sort == 'test_cases_count' %}
+                                                    {% if request.GET.order == 'desc' %}
+                                                        <i class="fas fa-sort-down"></i>
+                                                    {% else %}
+                                                        <i class="fas fa-sort-up"></i>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <i class="fas fa-sort"></i>
+                                                {% endif %}
+                                            </a>
+                                        </th>
+                                        <th>Statistics</th>
+                                        <th>Created By</th>
+                                        <th>
+                                            <a href="?{% if request.GET.search %}search={{ request.GET.search }}&{% endif %}{% if selected_project %}project={{ selected_project }}&{% endif %}sort=created_date{% if request.GET.sort == 'created_date' and request.GET.order != 'desc' %}&order=desc{% endif %}" class="text-white text-decoration-none">
+                                                Created Date
+                                                {% if request.GET.sort == 'created_date' %}
+                                                    {% if request.GET.order == 'desc' %}
+                                                        <i class="fas fa-sort-down"></i>
+                                                    {% else %}
+                                                        <i class="fas fa-sort-up"></i>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <i class="fas fa-sort"></i>
+                                                {% endif %}
+                                            </a>
+                                        </th>
+                                        <th style="width: 200px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for suite in test_suites %}
+                                        <tr>
+                                            <td>
+                                                <input type="checkbox" class="form-check-input suite-checkbox" 
+                                                       value="{{ suite.id }}">
+                                            </td>
+                                            <td>
+                                                <div>
+                                                    <strong>{{ suite.name }}</strong>
+                                                    {% if suite.test_cases.count == 0 %}
+                                                        <span class="badge bg-warning ms-2">Empty</span>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="text-truncate" style="max-width: 300px;" 
+                                                     title="{{ suite.description }}">
+                                                    {{ suite.description|default:"No description" }}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-primary">{{ suite.test_cases.count }} test cases</span>
+                                            </td>
+                                            <td>
+                                                {% with suite_stats=suite.get_test_case_statistics %}
+                                                    <div class="d-flex flex-wrap gap-1">
+                                                        {% if suite_stats.critical > 0 %}
+                                                            <span class="badge bg-danger" title="Critical Priority">
+                                                                <i class="fas fa-exclamation-triangle"></i> {{ suite_stats.critical }}
+                                                            </span>
+                                                        {% endif %}
+                                                        {% if suite_stats.high > 0 %}
+                                                            <span class="badge bg-warning" title="High Priority">
+                                                                <i class="fas fa-arrow-up"></i> {{ suite_stats.high }}
+                                                            </span>
+                                                        {% endif %}
+                                                        {% if suite_stats.medium > 0 %}
+                                                            <span class="badge bg-primary" title="Medium Priority">
+                                                                <i class="fas fa-minus"></i> {{ suite_stats.medium }}
+                                                            </span>
+                                                        {% endif %}
+                                                        {% if suite_stats.low > 0 %}
+                                                            <span class="badge bg-secondary" title="Low Priority">
+                                                                <i class="fas fa-arrow-down"></i> {{ suite_stats.low }}
+                                                            </span>
+                                                        {% endif %}
+                                                        {% if suite_stats.automated > 0 %}
+                                                            <span class="badge bg-info" title="Automated Test Cases">
+                                                                <i class="fas fa-robot"></i> {{ suite_stats.automated }}
+                                                            </span>
+                                                        {% endif %}
+                                                    </div>
+                                                {% endwith %}
+                                            </td>
+                                            <td>{{ suite.created_by.get_full_name|default:suite.created_by.username }}</td>
+                                            <td>{{ suite.created_date|date:"M d, Y H:i" }}</td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    {% if suite.test_cases.count > 0 %}
+                                                        <button type="button" class="btn btn-sm btn-success execute-suite-btn" 
+                                                                data-suite-id="{{ suite.id }}" 
+                                                                data-suite-name="{{ suite.name }}"
+                                                                title="Execute Suite">
+                                                            <i class="fas fa-play"></i>
+                                                        </button>
+                                                    {% endif %}
+                                                    <a href="{% url 'test_cases:test_suite_edit' suite.pk %}" 
+                                                       class="btn btn-sm btn-primary" title="Edit">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                    <button type="button" class="btn btn-sm btn-info" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#viewModal{{ suite.pk }}" 
+                                                            title="View Details">
+                                                        <i class="fas fa-eye"></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-danger" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#deleteModal{{ suite.pk }}" 
+                                                            title="Delete">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        {% if test_suites.has_other_pages %}
+                            <nav aria-label="Test suites pagination" class="mt-4">
+                                <ul class="pagination justify-content-center">
+                                    {% if test_suites.has_previous %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}">First</a>
+                                        </li>
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ test_suites.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}">Previous</a>
+                                        </li>
+                                    {% endif %}
+
+                                    {% for num in test_suites.paginator.page_range %}
+                                        {% if test_suites.number == num %}
+                                            <li class="page-item active">
+                                                <span class="page-link">{{ num }}</span>
+                                            </li>
+                                        {% elif num > test_suites.number|add:'-3' and num < test_suites.number|add:'3' %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}">{{ num }}</a>
+                                            </li>
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {% if test_suites.has_next %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ test_suites.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}">Next</a>
+                                        </li>
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ test_suites.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}">Last</a>
+                                        </li>
+                                    {% endif %}
+                                </ul>
+                            </nav>
+                        {% endif %}
+
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-layer-group fa-3x text-muted mb-3"></i>
+                            <h4 class="text-muted">No Test Suites Found</h4>
+                            <p class="text-muted">
+                                {% if search_query or selected_project %}
+                                    No test suites match your current filters.
+                                    <a href="{% url 'test_cases:test_suite_list' %}">Clear filters</a> to see all suites.
+                                {% else %}
+                                    You haven't created any test suites yet.
+                                {% endif %}
+                            </p>
+                            <a href="{% url 'test_cases:test_suite_create' %}" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Create Your First Test Suite
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- View Suite Details Modals -->
+            {% for suite in test_suites %}
+                <div class="modal fade" id="viewModal{{ suite.pk }}" tabindex="-1" 
+                     aria-labelledby="viewModalLabel{{ suite.pk }}" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="viewModalLabel{{ suite.pk }}">
+                                    <i class="fas fa-layer-group"></i> {{ suite.name }}
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6><i class="fas fa-info-circle"></i> Suite Information</h6>
+                                        <table class="table table-sm">
+                                            <tr>
+                                                <td><strong>Name:</strong></td>
+                                                <td>{{ suite.name }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Description:</strong></td>
+                                                <td>{{ suite.description|default:"No description" }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Test Cases:</strong></td>
+                                                <td>{{ suite.test_cases.count }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Created By:</strong></td>
+                                                <td>{{ suite.created_by.get_full_name|default:suite.created_by.username }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Created:</strong></td>
+                                                <td>{{ suite.created_date|date:"M d, Y H:i" }}</td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6><i class="fas fa-chart-pie"></i> Test Case Distribution</h6>
+                                        {% with suite_stats=suite.get_test_case_statistics %}
+                                            <div class="mb-3">
+                                                <canvas id="suiteChart{{ suite.pk }}" width="200" height="200"></canvas>
+                                            </div>
+                                            <div class="row text-center">
+                                                <div class="col-6">
+                                                    <small class="text-muted">Priority Distribution</small>
+                                                    <div class="mt-1">
+                                                        <span class="badge bg-danger me-1">Critical: {{ suite_stats.critical }}</span>
+                                                        <span class="badge bg-warning me-1">High: {{ suite_stats.high }}</span>
+                                                        <span class="badge bg-primary me-1">Medium: {{ suite_stats.medium }}</span>
+                                                        <span class="badge bg-secondary">Low: {{ suite_stats.low }}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-6">
+                                                    <small class="text-muted">Automation</small>
+                                                    <div class="mt-1">
+                                                        <span class="badge bg-info">Automated: {{ suite_stats.automated }}</span>
+                                                        <span class="badge bg-secondary">Manual: {{ suite_stats.manual }}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endwith %}
+                                    </div>
+                                </div>
+                                
+                                <hr>
+                                
+                                <h6><i class="fas fa-list"></i> Test Cases in Suite</h6>
+                                {% if suite.test_cases.all %}
+                                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                                        <table class="table table-sm table-striped">
+                                            <thead>
+                                                <tr>
+                                                    <th>Name</th>
+                                                    <th>Priority</th>
+                                                    <th>Status</th>
+                                                    <th>User Story</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for testcase in suite.test_cases.all %}
+                                                    <tr>
+                                                        <td>{{ testcase.name|truncatechars:40 }}</td>
+                                                        <td>
+                                                            {% if testcase.priority == 'critical' %}
+                                                                <span class="badge bg-danger">Critical</span>
+                                                            {% elif testcase.priority == 'high' %}
+                                                                <span class="badge bg-warning">High</span>
+                                                            {% elif testcase.priority == 'medium' %}
+                                                                <span class="badge bg-primary">Medium</span>
+                                                            {% else %}
+                                                                <span class="badge bg-secondary">Low</span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>
+                                                            {% if testcase.status == 'ready' %}
+                                                                <span class="badge bg-success">Ready</span>
+                                                            {% elif testcase.status == 'blocked' %}
+                                                                <span class="badge bg-danger">Blocked</span>
+                                                            {% else %}
+                                                                <span class="badge bg-secondary">Draft</span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>{{ testcase.user_story.name|truncatechars:30 }}</td>
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <p class="text-muted">No test cases in this suite.</p>
+                                {% endif %}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                {% if suite.test_cases.count > 0 %}
+                                    <button type="button" class="btn btn-success execute-suite-btn" 
+                                            data-suite-id="{{ suite.id }}" 
+                                            data-suite-name="{{ suite.name }}">
+                                        <i class="fas fa-play"></i> Execute Suite
+                                    </button>
+                                {% endif %}
+                                <a href="{% url 'test_cases:test_suite_edit' suite.pk %}" class="btn btn-primary">
+                                    <i class="fas fa-edit"></i> Edit Suite
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+
+            <!-- Delete Confirmation Modals -->
+            {% for suite in test_suites %}
+                <div class="modal fade" id="deleteModal{{ suite.pk }}" tabindex="-1" 
+                     aria-labelledby="deleteModalLabel{{ suite.pk }}" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="deleteModalLabel{{ suite.pk }}">
+                                    Confirm Delete
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Are you sure you want to delete the test suite <strong>"{{ suite.name }}"</strong>?</p>
+                                <p class="text-warning">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    This will remove the suite but will not delete the individual test cases.
+                                </p>
+                                {% if suite.test_cases.count > 0 %}
+                                    <p class="text-info">
+                                        <i class="fas fa-info-circle"></i>
+                                        This suite currently contains {{ suite.test_cases.count }} test case(s).
+                                    </p>
+                                {% endif %}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <form method="post" action="{% url 'test_cases:test_suite_delete' suite.pk %}" style="display: inline;">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-danger">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+
+            <!-- Execute Suite Modal -->
+            <div class="modal fade" id="executeSuiteModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Execute Test Suite</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <form id="execute-suite-form" method="post">
+                            {% csrf_token %}
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="test-run-name" class="form-label">Test Run Name</label>
+                                    <input type="text" class="form-control" id="test-run-name" name="test_run_name" required>
+                                    <div class="form-text">A test run will be created for this execution</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="test-run-description" class="form-label">Description</label>
+                                    <textarea class="form-control" id="test-run-description" name="test_run_description" rows="3"></textarea>
+                                </div>
+                                <input type="hidden" id="suite-id" name="suite_id">
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-play"></i> Create Test Run & Execute
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Project filter change handler
+    document.getElementById('project').addEventListener('change', function() {
+        const selectedProject = this.value;
+        const epicSelect = document.getElementById('epic');
+        
+        // Clear epic options
+        epicSelect.innerHTML = '<option value="">All Epics</option>';
+        
+        if (selectedProject) {
+            // Load epics for selected project
+            fetch(`{% url "test_cases:get_epics_by_project" %}?project_id=${selectedProject}`)
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(epic => {
+                        const option = document.createElement('option');
+                        option.value = epic.id;
+                        option.textContent = epic.name;
+                        epicSelect.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error loading epics:', error));
+        }
+        
+        this.form.submit();
+    });
+    
+    // Epic filter change handler
+    document.getElementById('epic').addEventListener('change', function() {
+        this.form.submit();
+    });
+    
+    // Bulk actions functionality
+    const bulkActionsBtn = document.getElementById('bulk-actions-btn');
+    const bulkActionsPanel = document.getElementById('bulk-actions-panel');
+    const suiteCheckboxes = document.querySelectorAll('.suite-checkbox');
+    const headerSelectAllCheckbox = document.getElementById('header-select-all');
+    const selectedCountSpan = document.getElementById('selected-count');
+    
+    // Function to update selected count and bulk actions visibility
+    function updateBulkActionsState() {
+        const checkedBoxes = document.querySelectorAll('.suite-checkbox:checked');
+        const count = checkedBoxes.length;
+        
+        selectedCountSpan.textContent = count + ' item' + (count !== 1 ? 's' : '') + ' selected';
+        
+        if (count > 0) {
+            bulkActionsBtn.style.display = 'inline-block';
+        } else {
+            bulkActionsBtn.style.display = 'none';
+            bulkActionsPanel.style.display = 'none';
+        }
+        
+        // Update select-all checkbox state
+        const allChecked = count === suiteCheckboxes.length && count > 0;
+        const someChecked = count > 0 && count < suiteCheckboxes.length;
+        
+        headerSelectAllCheckbox.checked = allChecked;
+        headerSelectAllCheckbox.indeterminate = someChecked;
+    }
+    
+    // Individual checkbox change handlers
+    suiteCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateBulkActionsState);
+    });
+    
+    // Select all functionality
+    headerSelectAllCheckbox.addEventListener('change', function() {
+        suiteCheckboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+        });
+        updateBulkActionsState();
+    });
+    
+    // Bulk actions button click handler
+    bulkActionsBtn.addEventListener('click', function() {
+        if (bulkActionsPanel.style.display === 'none' || !bulkActionsPanel.style.display) {
+            bulkActionsPanel.style.display = 'block';
+        } else {
+            bulkActionsPanel.style.display = 'none';
+        }
+    });
+    
+    // Cancel bulk actions
+    document.getElementById('cancel-bulk-actions').addEventListener('click', function() {
+        bulkActionsPanel.style.display = 'none';
+        suiteCheckboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        headerSelectAllCheckbox.checked = false;
+        updateBulkActionsState();
+    });
+    
+    // Bulk execute functionality
+    document.getElementById('bulk-execute-btn').addEventListener('click', function() {
+        const checkedBoxes = document.querySelectorAll('.suite-checkbox:checked');
+        
+        if (checkedBoxes.length === 0) {
+            alert('Please select at least one test suite.');
+            return;
+        }
+        
+        if (confirm(`Execute ${checkedBoxes.length} selected test suite(s)?`)) {
+            const suiteIds = Array.from(checkedBoxes).map(cb => cb.value);
+            
+            // Create bulk execution form
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '{% url "test_cases:test_suite_list" %}';
+            
+            // Add CSRF token
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrfmiddlewaretoken';
+            csrfInput.value = csrfToken;
+            form.appendChild(csrfInput);
+            
+            // Add bulk action indicator
+            const actionInput

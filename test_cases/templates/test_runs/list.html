@@ -1,0 +1,469 @@
+{% extends 'base.html' %}
+
+{% block title %}Test Runs - Test Case Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Test Runs</h2>
+                <div>
+                    <a href="{% url 'test_cases:test_run_create' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Create Test Run
+                    </a>
+                    <button id="bulk-actions-btn" class="btn btn-secondary" style="display: none;">
+                        <i class="fas fa-tasks"></i> Bulk Actions
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filter Panel -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-3">
+                            <label for="search" class="form-label">Search</label>
+                            <input type="text" class="form-control" id="search" name="search" 
+                                   value="{{ search_query }}" placeholder="Search test runs...">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="status" class="form-label">Status</label>
+                            <select class="form-control" id="status" name="status">
+                                <option value="">All Statuses</option>
+                                {% for value, label in status_choices %}
+                                    <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>
+                                        {{ label }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="date_from" class="form-label">From Date</label>
+                            <input type="date" class="form-control" id="date_from" name="date_from" 
+                                   value="{{ date_from }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="date_to" class="form-label">To Date</label>
+                            <input type="date" class="form-control" id="date_to" name="date_to" 
+                                   value="{{ date_to }}">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary me-2">
+                                <i class="fas fa-search"></i> Filter
+                            </button>
+                            <a href="{% url 'test_cases:test_run_list' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Clear
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Bulk Actions Panel -->
+            <div id="bulk-actions-panel" class="card mb-3" style="display: none;">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label for="bulk-status" class="form-label">Change Status</label>
+                            <select class="form-control" id="bulk-status">
+                                <option value="">Select Status</option>
+                                {% for value, label in status_choices %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <button id="apply-bulk-actions" class="btn btn-warning me-2">
+                                <i class="fas fa-check"></i> Apply Changes
+                            </button>
+                            <button id="cancel-bulk-actions" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Cancel
+                            </button>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end justify-content-end">
+                            <span id="selected-count" class="text-muted">0 items selected</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Runs Table -->
+            <div class="card">
+                <div class="card-body">
+                    {% if test_runs %}
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th style="width: 40px;">
+                                            <input type="checkbox" id="header-select-all" class="form-check-input">
+                                        </th>
+                                        <th>Name</th>
+                                        <th>Description</th>
+                                        <th>Status</th>
+                                        <th>Progress</th>
+                                        <th>Created By</th>
+                                        <th>Created Date</th>
+                                        <th>Scheduled Date</th>
+                                        <th style="width: 200px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for test_run in test_runs %}
+                                        <tr>
+                                            <td>
+                                                <input type="checkbox" class="form-check-input test-run-checkbox" 
+                                                       value="{{ test_run.id }}">
+                                            </td>
+                                            <td>
+                                                <strong>{{ test_run.name }}</strong>
+                                            </td>
+                                            <td>
+                                                <div class="text-truncate" style="max-width: 200px;" 
+                                                     title="{{ test_run.description }}">
+                                                    {{ test_run.description|default:"No description" }}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                {% if test_run.status == 'not_started' %}
+                                                    <span class="badge bg-secondary">Not Started</span>
+                                                {% elif test_run.status == 'in_progress' %}
+                                                    <span class="badge bg-primary">In Progress</span>
+                                                {% elif test_run.status == 'completed' %}
+                                                    <span class="badge bg-success">Completed</span>
+                                                {% elif test_run.status == 'cancelled' %}
+                                                    <span class="badge bg-danger">Cancelled</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% with summary=test_run.get_execution_summary %}
+                                                    {% if summary.total > 0 %}
+                                                        <div class="progress" style="height: 20px;">
+                                                            {% if summary.passed > 0 %}
+                                                                <div class="progress-bar bg-success" role="progressbar" 
+                                                                     style="width: {{ summary.passed|div:summary.total|mul:100 }}%"
+                                                                     title="Passed: {{ summary.passed }}">
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if summary.failed > 0 %}
+                                                                <div class="progress-bar bg-danger" role="progressbar" 
+                                                                     style="width: {{ summary.failed|div:summary.total|mul:100 }}%"
+                                                                     title="Failed: {{ summary.failed }}">
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if summary.skipped > 0 %}
+                                                                <div class="progress-bar bg-warning" role="progressbar" 
+                                                                     style="width: {{ summary.skipped|div:summary.total|mul:100 }}%"
+                                                                     title="Skipped: {{ summary.skipped }}">
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if summary.blocked > 0 %}
+                                                                <div class="progress-bar bg-dark" role="progressbar" 
+                                                                     style="width: {{ summary.blocked|div:summary.total|mul:100 }}%"
+                                                                     title="Blocked: {{ summary.blocked }}">
+                                                                </div>
+                                                            {% endif %}
+                                                        </div>
+                                                        <small class="text-muted">
+                                                            {{ summary.passed|add:summary.failed|add:summary.skipped|add:summary.blocked }}/{{ summary.total }}
+                                                            ({{ summary.pass_rate|floatformat:1 }}% pass rate)
+                                                        </small>
+                                                    {% else %}
+                                                        <span class="text-muted">No executions</span>
+                                                    {% endif %}
+                                                {% endwith %}
+                                            </td>
+                                            <td>{{ test_run.created_by.get_full_name|default:test_run.created_by.username }}</td>
+                                            <td>{{ test_run.created_date|date:"M d, Y H:i" }}</td>
+                                            <td>
+                                                {% if test_run.scheduled_date %}
+                                                    {{ test_run.scheduled_date|date:"M d, Y H:i" }}
+                                                {% else %}
+                                                    <span class="text-muted">Not scheduled</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    <a href="{% url 'test_cases:test_run_execute' test_run.pk %}" 
+                                                       class="btn btn-sm btn-success" title="Execute Test Run">
+                                                        <i class="fas fa-play"></i>
+                                                    </a>
+                                                    <a href="{% url 'test_cases:test_run_edit' test_run.pk %}" 
+                                                       class="btn btn-sm btn-primary" title="Edit">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                    <button type="button" class="btn btn-sm btn-danger" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#deleteModal{{ test_run.pk }}" 
+                                                            title="Delete">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        {% if test_runs.has_other_pages %}
+                            <nav aria-label="Test runs pagination" class="mt-4">
+                                <ul class="pagination justify-content-center">
+                                    {% if test_runs.has_previous %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">First</a>
+                                        </li>
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ test_runs.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">Previous</a>
+                                        </li>
+                                    {% endif %}
+
+                                    {% for num in test_runs.paginator.page_range %}
+                                        {% if test_runs.number == num %}
+                                            <li class="page-item active">
+                                                <span class="page-link">{{ num }}</span>
+                                            </li>
+                                        {% elif num > test_runs.number|add:'-3' and num < test_runs.number|add:'3' %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">{{ num }}</a>
+                                            </li>
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {% if test_runs.has_next %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ test_runs.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">Next</a>
+                                        </li>
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ test_runs.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">Last</a>
+                                        </li>
+                                    {% endif %}
+                                </ul>
+                            </nav>
+                        {% endif %}
+
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-clipboard-list fa-3x text-muted mb-3"></i>
+                            <h4 class="text-muted">No Test Runs Found</h4>
+                            <p class="text-muted">
+                                {% if search_query or selected_status or date_from or date_to %}
+                                    No test runs match your current filters.
+                                    <a href="{% url 'test_cases:test_run_list' %}">Clear filters</a> to see all test runs.
+                                {% else %}
+                                    You haven't created any test runs yet.
+                                {% endif %}
+                            </p>
+                            <a href="{% url 'test_cases:test_run_create' %}" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Create Your First Test Run
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Delete Confirmation Modals -->
+            {% for test_run in test_runs %}
+                <div class="modal fade" id="deleteModal{{ test_run.pk }}" tabindex="-1" 
+                     aria-labelledby="deleteModalLabel{{ test_run.pk }}" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="deleteModalLabel{{ test_run.pk }}">
+                                    Confirm Delete
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Are you sure you want to delete the test run <strong>"{{ test_run.name }}"</strong>?</p>
+                                <p class="text-danger">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    This action cannot be undone and will also delete all associated test executions.
+                                </p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <form method="post" action="{% url 'test_cases:test_run_delete' test_run.pk %}" style="display: inline;">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-danger">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+
+            <!-- Select All Checkbox -->
+            <input type="checkbox" id="select-all" style="display: none;">
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Filter form auto-submit
+    document.getElementById('status').addEventListener('change', function() {
+        this.form.submit();
+    });
+    
+    document.getElementById('date_from').addEventListener('change', function() {
+        this.form.submit();
+    });
+    
+    document.getElementById('date_to').addEventListener('change', function() {
+        this.form.submit();
+    });
+    
+    // Bulk actions functionality
+    const bulkActionsBtn = document.getElementById('bulk-actions-btn');
+    const bulkActionsPanel = document.getElementById('bulk-actions-panel');
+    const testRunCheckboxes = document.querySelectorAll('.test-run-checkbox');
+    const selectAllCheckbox = document.getElementById('select-all');
+    const headerSelectAllCheckbox = document.getElementById('header-select-all');
+    const selectedCountSpan = document.getElementById('selected-count');
+    
+    // Function to update selected count and bulk actions visibility
+    function updateBulkActionsState() {
+        const checkedBoxes = document.querySelectorAll('.test-run-checkbox:checked');
+        const count = checkedBoxes.length;
+        
+        selectedCountSpan.textContent = count + ' item' + (count !== 1 ? 's' : '') + ' selected';
+        
+        if (count > 0) {
+            bulkActionsBtn.style.display = 'inline-block';
+        } else {
+            bulkActionsBtn.style.display = 'none';
+            bulkActionsPanel.style.display = 'none';
+        }
+        
+        // Update select-all checkboxes state
+        const allChecked = count === testRunCheckboxes.length && count > 0;
+        const someChecked = count > 0 && count < testRunCheckboxes.length;
+        
+        selectAllCheckbox.checked = allChecked;
+        headerSelectAllCheckbox.checked = allChecked;
+        selectAllCheckbox.indeterminate = someChecked;
+        headerSelectAllCheckbox.indeterminate = someChecked;
+    }
+    
+    // Individual checkbox change handlers
+    testRunCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateBulkActionsState);
+    });
+    
+    // Select all functionality
+    function toggleAllCheckboxes(checked) {
+        testRunCheckboxes.forEach(checkbox => {
+            checkbox.checked = checked;
+        });
+        updateBulkActionsState();
+    }
+    
+    selectAllCheckbox.addEventListener('change', function() {
+        toggleAllCheckboxes(this.checked);
+    });
+    
+    headerSelectAllCheckbox.addEventListener('change', function() {
+        toggleAllCheckboxes(this.checked);
+    });
+    
+    // Bulk actions button click handler
+    bulkActionsBtn.addEventListener('click', function() {
+        if (bulkActionsPanel.style.display === 'none' || !bulkActionsPanel.style.display) {
+            bulkActionsPanel.style.display = 'block';
+        } else {
+            bulkActionsPanel.style.display = 'none';
+        }
+    });
+    
+    // Cancel bulk actions
+    document.getElementById('cancel-bulk-actions').addEventListener('click', function() {
+        bulkActionsPanel.style.display = 'none';
+        testRunCheckboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        selectAllCheckbox.checked = false;
+        headerSelectAllCheckbox.checked = false;
+        updateBulkActionsState();
+    });
+    
+    // Apply bulk actions
+    document.getElementById('apply-bulk-actions').addEventListener('click', function() {
+        const checkedBoxes = document.querySelectorAll('.test-run-checkbox:checked');
+        const bulkStatus = document.getElementById('bulk-status').value;
+        
+        if (checkedBoxes.length === 0) {
+            alert('Please select at least one test run.');
+            return;
+        }
+        
+        if (!bulkStatus) {
+            alert('Please select a status to apply.');
+            return;
+        }
+        
+        if (confirm(`Apply status change to ${checkedBoxes.length} selected test run(s)?`)) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '{% url "test_cases:test_run_list" %}';
+            
+            // Add CSRF token
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrfmiddlewaretoken';
+            csrfInput.value = csrfToken;
+            form.appendChild(csrfInput);
+            
+            // Add bulk action indicator
+            const actionInput = document.createElement('input');
+            actionInput.type = 'hidden';
+            actionInput.name = 'bulk_action';
+            actionInput.value = 'true';
+            form.appendChild(actionInput);
+            
+            // Add selected test run IDs
+            checkedBoxes.forEach(checkbox => {
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'selected_test_runs';
+                idInput.value = checkbox.value;
+                form.appendChild(idInput);
+            });
+            
+            // Add bulk status value
+            const statusInput = document.createElement('input');
+            statusInput.type = 'hidden';
+            statusInput.name = 'bulk_status';
+            statusInput.value = bulkStatus;
+            form.appendChild(statusInput);
+            
+            document.body.appendChild(form);
+            form.submit();
+        }
+    });
+    
+    // Initialize bulk actions state
+    updateBulkActionsState();
+    
+    // Progress bar tooltips
+    const progressBars = document.querySelectorAll('.progress-bar');
+    progressBars.forEach(bar => {
+        if (bar.getAttribute('title')) {
+            bar.setAttribute('data-bs-toggle', 'tooltip');
+            bar.setAttribute('data-bs-placement', 'top');
+        }
+    });
+    
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

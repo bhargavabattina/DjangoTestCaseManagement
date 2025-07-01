@@ -1,0 +1,688 @@
+{% extends 'base.html' %}
+
+{% block title %}Execute Test Run: {{ test_run.name }} - Test Case Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2>Execute Test Run: {{ test_run.name }}</h2>
+                    <p class="text-muted mb-0">{{ test_run.description|default:"No description available" }}</p>
+                </div>
+                <div>
+                    <a href="{% url 'test_cases:test_run_list' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Test Runs
+                    </a>
+                    <button id="save-progress-btn" class="btn btn-primary ms-2">
+                        <i class="fas fa-save"></i> Save Progress
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress Panel -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5 class="card-title mb-3">
+                                <i class="fas fa-chart-line"></i> Execution Progress
+                                <span class="badge bg-info ms-2" id="progress-badge">
+                                    {{ summary.passed|add:summary.failed|add:summary.skipped|add:summary.blocked }}/{{ summary.total }}
+                                </span>
+                            </h5>
+                            <div class="progress mb-3" style="height: 25px;">
+                                {% if summary.total > 0 %}
+                                    <div class="progress-bar bg-success" role="progressbar" 
+                                         style="width: {{ summary.passed|div:summary.total|mul:100 }}%"
+                                         id="passed-progress">
+                                        {% if summary.passed > 0 %}{{ summary.passed }} Passed{% endif %}
+                                    </div>
+                                    <div class="progress-bar bg-danger" role="progressbar" 
+                                         style="width: {{ summary.failed|div:summary.total|mul:100 }}%"
+                                         id="failed-progress">
+                                        {% if summary.failed > 0 %}{{ summary.failed }} Failed{% endif %}
+                                    </div>
+                                    <div class="progress-bar bg-warning" role="progressbar" 
+                                         style="width: {{ summary.skipped|div:summary.total|mul:100 }}%"
+                                         id="skipped-progress">
+                                        {% if summary.skipped > 0 %}{{ summary.skipped }} Skipped{% endif %}
+                                    </div>
+                                    <div class="progress-bar bg-dark" role="progressbar" 
+                                         style="width: {{ summary.blocked|div:summary.total|mul:100 }}%"
+                                         id="blocked-progress">
+                                        {% if summary.blocked > 0 %}{{ summary.blocked }} Blocked{% endif %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <div class="card bg-light">
+                                        <div class="card-body py-2">
+                                            <h6 class="card-title mb-1">Pass Rate</h6>
+                                            <h4 class="text-success mb-0" id="pass-rate">{{ summary.pass_rate|floatformat:1 }}%</h4>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card bg-light">
+                                        <div class="card-body py-2">
+                                            <h6 class="card-title mb-1">Total Time</h6>
+                                            <h4 class="text-primary mb-0" id="total-time">00:00:00</h4>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation Controls -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <button id="prev-testcase-btn" class="btn btn-outline-secondary" disabled>
+                                <i class="fas fa-chevron-left"></i> Previous
+                            </button>
+                            <button id="next-testcase-btn" class="btn btn-outline-secondary ms-2">
+                                Next <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                        <div>
+                            <span class="text-muted">Test Case: </span>
+                            <span id="current-testcase-index">1</span> of {{ executions.count }}
+                        </div>
+                        <div>
+                            <button id="expand-all-btn" class="btn btn-outline-info">
+                                <i class="fas fa-expand-alt"></i> Expand All
+                            </button>
+                            <button id="collapse-all-btn" class="btn btn-outline-info ms-2">
+                                <i class="fas fa-compress-alt"></i> Collapse All
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Cases Execution -->
+            <div id="test-cases-container">
+                {% for execution in executions %}
+                <div class="card mb-3 test-case-panel" data-execution-id="{{ execution.id }}" data-index="{{ forloop.counter }}">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center">
+                                <button class="btn btn-sm btn-outline-secondary me-3 collapse-toggle" 
+                                        data-bs-toggle="collapse" 
+                                        data-bs-target="#execution-{{ execution.id }}"
+                                        aria-expanded="false">
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                                <div>
+                                    <h6 class="mb-0">
+                                        <span class="badge bg-secondary me-2">TC-{{ execution.testcase.id }}</span>
+                                        {{ execution.testcase.name }}
+                                    </h6>
+                                    <small class="text-muted">{{ execution.testcase.user_story.name }}</small>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <div class="execution-status me-3">
+                                    {% if execution.status == 'not_executed' %}
+                                        <span class="badge bg-secondary">Not Executed</span>
+                                    {% elif execution.status == 'in_progress' %}
+                                        <span class="badge bg-primary">In Progress</span>
+                                    {% elif execution.status == 'passed' %}
+                                        <span class="badge bg-success">Passed</span>
+                                    {% elif execution.status == 'failed' %}
+                                        <span class="badge bg-danger">Failed</span>
+                                    {% elif execution.status == 'skipped' %}
+                                        <span class="badge bg-warning">Skipped</span>
+                                    {% elif execution.status == 'blocked' %}
+                                        <span class="badge bg-dark">Blocked</span>
+                                    {% endif %}
+                                </div>
+                                <div class="execution-timer me-3" style="display: none;">
+                                    <i class="fas fa-clock"></i>
+                                    <span class="timer-display">00:00:00</span>
+                                </div>
+                                <div class="priority-badge">
+                                    {% if execution.testcase.priority == 'critical' %}
+                                        <span class="badge bg-danger">Critical</span>
+                                    {% elif execution.testcase.priority == 'high' %}
+                                        <span class="badge bg-warning">High</span>
+                                    {% elif execution.testcase.priority == 'medium' %}
+                                        <span class="badge bg-primary">Medium</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Low</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="collapse" id="execution-{{ execution.id }}">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <!-- Test Case Details -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-info-circle"></i> Test Case Description</h6>
+                                        <p class="text-muted">{{ execution.testcase.description|default:"No description available" }}</p>
+                                    </div>
+                                    
+                                    <!-- Test Steps -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-list-ol"></i> Test Steps</h6>
+                                        <div class="test-steps">
+                                            {{ execution.testcase.test_steps|linebreaks }}
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Expected Results -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-check-circle"></i> Expected Results</h6>
+                                        <div class="expected-results">
+                                            {{ execution.testcase.expected_results|linebreaks }}
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Actual Results -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-clipboard-check"></i> Actual Results</h6>
+                                        <textarea class="form-control actual-results" rows="3" 
+                                                  placeholder="Enter actual results here...">{{ execution.comments }}</textarea>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-4">
+                                    <!-- Execution Controls -->
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="card-title"><i class="fas fa-play-circle"></i> Execution Controls</h6>
+                                            
+                                            <!-- Timer Controls -->
+                                            <div class="mb-3">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="small">Execution Time:</span>
+                                                    <span class="timer-display fw-bold">00:00:00</span>
+                                                </div>
+                                                <div class="btn-group w-100" role="group">
+                                                    <button class="btn btn-sm btn-success start-timer">
+                                                        <i class="fas fa-play"></i> Start
+                                                    </button>
+                                                    <button class="btn btn-sm btn-warning pause-timer" disabled>
+                                                        <i class="fas fa-pause"></i> Pause
+                                                    </button>
+                                                    <button class="btn btn-sm btn-danger stop-timer" disabled>
+                                                        <i class="fas fa-stop"></i> Stop
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Status Selection -->
+                                            <div class="mb-3">
+                                                <label class="form-label">Execution Status</label>
+                                                <select class="form-control execution-status-select">
+                                                    <option value="not_executed" {% if execution.status == 'not_executed' %}selected{% endif %}>Not Executed</option>
+                                                    <option value="in_progress" {% if execution.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+                                                    <option value="passed" {% if execution.status == 'passed' %}selected{% endif %}>Passed</option>
+                                                    <option value="failed" {% if execution.status == 'failed' %}selected{% endif %}>Failed</option>
+                                                    <option value="skipped" {% if execution.status == 'skipped' %}selected{% endif %}>Skipped</option>
+                                                    <option value="blocked" {% if execution.status == 'blocked' %}selected{% endif %}>Blocked</option>
+                                                </select>
+                                            </div>
+                                            
+                                            <!-- Comments -->
+                                            <div class="mb-3">
+                                                <label class="form-label">Comments</label>
+                                                <textarea class="form-control execution-comments" rows="3" 
+                                                          placeholder="Add execution comments...">{{ execution.notes }}</textarea>
+                                            </div>
+                                            
+                                            <!-- Action Buttons -->
+                                            <div class="d-grid gap-2">
+                                                <button class="btn btn-primary save-execution">
+                                                    <i class="fas fa-save"></i> Save Result
+                                                </button>
+                                                <button class="btn btn-success quick-pass">
+                                                    <i class="fas fa-check"></i> Quick Pass
+                                                </button>
+                                                <button class="btn btn-danger quick-fail">
+                                                    <i class="fas fa-times"></i> Quick Fail
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Execution History -->
+                                    {% if execution.execution_date %}
+                                    <div class="card mt-3">
+                                        <div class="card-body">
+                                            <h6 class="card-title"><i class="fas fa-history"></i> Execution History</h6>
+                                            <div class="small">
+                                                <p class="mb-1"><strong>Last Executed:</strong> {{ execution.execution_date|date:"M d, Y H:i" }}</p>
+                                                <p class="mb-1"><strong>Executor:</strong> {{ execution.executor.get_full_name|default:execution.executor.username }}</p>
+                                                {% if execution.execution_time_minutes %}
+                                                <p class="mb-0"><strong>Duration:</strong> {{ execution.execution_time_minutes }} minutes</p>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Execution Summary -->
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-chart-pie"></i> Execution Summary</h5>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h3 class="text-success">{{ summary.passed }}</h3>
+                                <p class="mb-0">Passed</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h3 class="text-danger">{{ summary.failed }}</h3>
+                                <p class="mb-0">Failed</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h3 class="text-warning">{{ summary.skipped }}</h3>
+                                <p class="mb-0">Skipped</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h3 class="text-dark">{{ summary.blocked }}</h3>
+                                <p class="mb-0">Blocked</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Keyboard Shortcuts Modal -->
+<div class="modal fade" id="keyboardShortcutsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Keyboard Shortcuts</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-6">
+                        <h6>Navigation</h6>
+                        <ul class="list-unstyled">
+                            <li><kbd>N</kbd> - Next test case</li>
+                            <li><kbd>P</kbd> - Previous test case</li>
+                            <li><kbd>E</kbd> - Expand all</li>
+                            <li><kbd>C</kbd> - Collapse all</li>
+                        </ul>
+                    </div>
+                    <div class="col-6">
+                        <h6>Execution</h6>
+                        <ul class="list-unstyled">
+                            <li><kbd>1</kbd> - Quick Pass</li>
+                            <li><kbd>2</kbd> - Quick Fail</li>
+                            <li><kbd>3</kbd> - Skip</li>
+                            <li><kbd>S</kbd> - Save Result</li>
+                            <li><kbd>T</kbd> - Start/Stop Timer</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let currentTestCaseIndex = 0;
+    let totalExecutionTime = 0;
+    let globalTimer = null;
+    let executionTimers = new Map();
+    
+    const testCasePanels = document.querySelectorAll('.test-case-panel');
+    const prevBtn = document.getElementById('prev-testcase-btn');
+    const nextBtn = document.getElementById('next-testcase-btn');
+    const currentIndexSpan = document.getElementById('current-testcase-index');
+    const expandAllBtn = document.getElementById('expand-all-btn');
+    const collapseAllBtn = document.getElementById('collapse-all-btn');
+    const saveProgressBtn = document.getElementById('save-progress-btn');
+    
+    // Initialize
+    updateNavigationButtons();
+    startGlobalTimer();
+    
+    // Navigation functions
+    function updateNavigationButtons() {
+        prevBtn.disabled = currentTestCaseIndex === 0;
+        nextBtn.disabled = currentTestCaseIndex === testCasePanels.length - 1;
+        currentIndexSpan.textContent = currentTestCaseIndex + 1;
+    }
+    
+    function navigateToTestCase(index) {
+        if (index >= 0 && index < testCasePanels.length) {
+            // Collapse current test case
+            const currentPanel = testCasePanels[currentTestCaseIndex];
+            const currentCollapse = currentPanel.querySelector('.collapse');
+            const currentToggle = currentPanel.querySelector('.collapse-toggle');
+            
+            if (currentCollapse.classList.contains('show')) {
+                currentCollapse.classList.remove('show');
+                currentToggle.querySelector('i').classList.remove('fa-chevron-up');
+                currentToggle.querySelector('i').classList.add('fa-chevron-down');
+            }
+            
+            // Expand new test case
+            currentTestCaseIndex = index;
+            const newPanel = testCasePanels[currentTestCaseIndex];
+            const newCollapse = newPanel.querySelector('.collapse');
+            const newToggle = newPanel.querySelector('.collapse-toggle');
+            
+            newCollapse.classList.add('show');
+            newToggle.querySelector('i').classList.remove('fa-chevron-down');
+            newToggle.querySelector('i').classList.add('fa-chevron-up');
+            
+            // Scroll to panel
+            newPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            
+            updateNavigationButtons();
+        }
+    }
+    
+    // Event listeners
+    prevBtn.addEventListener('click', () => navigateToTestCase(currentTestCaseIndex - 1));
+    nextBtn.addEventListener('click', () => navigateToTestCase(currentTestCaseIndex + 1));
+    
+    expandAllBtn.addEventListener('click', function() {
+        testCasePanels.forEach(panel => {
+            const collapse = panel.querySelector('.collapse');
+            const toggle = panel.querySelector('.collapse-toggle');
+            
+            collapse.classList.add('show');
+            toggle.querySelector('i').classList.remove('fa-chevron-down');
+            toggle.querySelector('i').classList.add('fa-chevron-up');
+        });
+    });
+    
+    collapseAllBtn.addEventListener('click', function() {
+        testCasePanels.forEach(panel => {
+            const collapse = panel.querySelector('.collapse');
+            const toggle = panel.querySelector('.collapse-toggle');
+            
+            collapse.classList.remove('show');
+            toggle.querySelector('i').classList.remove('fa-chevron-up');
+            toggle.querySelector('i').classList.add('fa-chevron-down');
+        });
+    });
+    
+    // Collapse toggle handlers
+    document.querySelectorAll('.collapse-toggle').forEach(toggle => {
+        toggle.addEventListener('click', function() {
+            const icon = this.querySelector('i');
+            setTimeout(() => {
+                if (icon.classList.contains('fa-chevron-down')) {
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                } else {
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                }
+            }, 150);
+        });
+    });
+    
+    // Timer functions
+    function formatTime(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    function startGlobalTimer() {
+        globalTimer = setInterval(() => {
+            totalExecutionTime++;
+            document.getElementById('total-time').textContent = formatTime(totalExecutionTime);
+        }, 1000);
+    }
+    
+    function startExecutionTimer(executionId) {
+        if (executionTimers.has(executionId)) {
+            clearInterval(executionTimers.get(executionId).interval);
+        }
+        
+        const timer = {
+            startTime: Date.now(),
+            elapsed: 0,
+            interval: null
+        };
+        
+        timer.interval = setInterval(() => {
+            timer.elapsed = Math.floor((Date.now() - timer.startTime) / 1000);
+            const panel = document.querySelector(`[data-execution-id="${executionId}"]`);
+            const displays = panel.querySelectorAll('.timer-display');
+            displays.forEach(display => {
+                display.textContent = formatTime(timer.elapsed);
+            });
+        }, 1000);
+        
+        executionTimers.set(executionId, timer);
+    }
+    
+    function stopExecutionTimer(executionId) {
+        if (executionTimers.has(executionId)) {
+            clearInterval(executionTimers.get(executionId).interval);
+            return executionTimers.get(executionId).elapsed;
+        }
+        return 0;
+    }
+    
+    // Execution controls
+    testCasePanels.forEach(panel => {
+        const executionId = panel.getAttribute('data-execution-id');
+        const startBtn = panel.querySelector('.start-timer');
+        const pauseBtn = panel.querySelector('.pause-timer');
+        const stopBtn = panel.querySelector('.stop-timer');
+        const statusSelect = panel.querySelector('.execution-status-select');
+        const commentsTextarea = panel.querySelector('.execution-comments');
+        const actualResultsTextarea = panel.querySelector('.actual-results');
+        const saveBtn = panel.querySelector('.save-execution');
+        const quickPassBtn = panel.querySelector('.quick-pass');
+        const quickFailBtn = panel.querySelector('.quick-fail');
+        
+        // Timer controls
+        startBtn.addEventListener('click', function() {
+            startExecutionTimer(executionId);
+            this.disabled = true;
+            pauseBtn.disabled = false;
+            stopBtn.disabled = false;
+            
+            // Show timer in header
+            panel.querySelector('.execution-timer').style.display = 'inline-block';
+            
+            // Set status to in progress
+            statusSelect.value = 'in_progress';
+            updateExecutionStatus(panel, 'in_progress');
+        });
+        
+        pauseBtn.addEventListener('click', function() {
+            if (executionTimers.has(executionId)) {
+                clearInterval(executionTimers.get(executionId).interval);
+                this.disabled = true;
+                startBtn.disabled = false;
+            }
+        });
+        
+        stopBtn.addEventListener('click', function() {
+            const elapsedSeconds = stopExecutionTimer(executionId);
+            this.disabled = true;
+            pauseBtn.disabled = true;
+            startBtn.disabled = false;
+            
+            // Hide timer in header
+            panel.querySelector('.execution-timer').style.display = 'none';
+            
+            return elapsedSeconds;
+        });
+        
+        // Status change handler
+        statusSelect.addEventListener('change', function() {
+            updateExecutionStatus(panel, this.value);
+        });
+        
+        // Save execution
+        saveBtn.addEventListener('click', function() {
+            saveExecutionResult(executionId, panel);
+        });
+        
+        // Quick actions
+        quickPassBtn.addEventListener('click', function() {
+            statusSelect.value = 'passed';
+            updateExecutionStatus(panel, 'passed');
+            saveExecutionResult(executionId, panel);
+            setTimeout(() => navigateToTestCase(currentTestCaseIndex + 1), 500);
+        });
+        
+        quickFailBtn.addEventListener('click', function() {
+            statusSelect.value = 'failed';
+            updateExecutionStatus(panel, 'failed');
+            saveExecutionResult(executionId, panel);
+        });
+    });
+    
+    function updateExecutionStatus(panel, status) {
+        const statusBadge = panel.querySelector('.execution-status .badge');
+        const statusClasses = {
+            'not_executed': 'bg-secondary',
+            'in_progress': 'bg-primary',
+            'passed': 'bg-success',
+            'failed': 'bg-danger',
+            'skipped': 'bg-warning',
+            'blocked': 'bg-dark'
+        };
+        
+        const statusLabels = {
+            'not_executed': 'Not Executed',
+            'in_progress': 'In Progress',
+            'passed': 'Passed',
+            'failed': 'Failed',
+            'skipped': 'Skipped',
+            'blocked': 'Blocked'
+        };
+        
+        // Remove all status classes
+        Object.values(statusClasses).forEach(cls => {
+            statusBadge.classList.remove(cls);
+        });
+        
+        // Add new status class
+        statusBadge.classList.add(statusClasses[status]);
+        statusBadge.textContent = statusLabels[status];
+        
+        updateProgressBar();
+    }
+    
+    function saveExecutionResult(executionId, panel) {
+        const statusSelect = panel.querySelector('.execution-status-select');
+        const commentsTextarea = panel.querySelector('.execution-comments');
+        const actualResultsTextarea = panel.querySelector('.actual-results');
+        const executionTime = executionTimers.has(executionId) ? 
+            Math.floor(executionTimers.get(executionId).elapsed / 60) : null;
+        
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        formData.append('status', statusSelect.value);
+        formData.append('comments', actualResultsTextarea.value);
+        formData.append('notes', commentsTextarea.value);
+        if (executionTime) {
+            formData.append('execution_time_minutes', executionTime);
+        }
+        
+        fetch(`{% url 'test_cases:test_execution_record' 0 %}`.replace('0', executionId), {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Show success message
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                alert.style.top = '20px';
+                alert.style.right = '20px';
+                alert.style.zIndex = '9999';
+                alert.innerHTML = `
+                    <i class="fas fa-check-circle"></i> Execution result saved successfully!
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.body.appendChild(alert);
+                
+                setTimeout(() => {
+                    alert.remove();
+                }, 3000);
+            } else {
+                alert('Error saving execution result: ' + JSON.stringify(data.errors));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error saving execution result');
+        });
+    }
+    
+    function updateProgressBar() {
+        // Update progress bar and statistics
+        fetch(`{% url 'test_cases:get_execution_stats' %}?test_run_id={{ test_run.id }}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('progress-badge').textContent = 
+                    `${data.passed + data.failed + data.skipped + data.blocked}/${data.total}`;
+                document.getElementById('pass-rate').textContent = `${data.pass_rate.toFixed(1)}%`;
+                
+                // Update progress bar
+                const total = data.total;
+                if (total > 0) {
+                    document.getElementById('passed-progress').style.width = `${(data.passed / total) * 100}%`;
+                    document.getElementById('failed-progress').style.width = `${(data.failed / total) * 100}%`;
+                    document.getElementById('skipped-progress').style.width = `${(data.skipped / total) * 100}%`;
+                    document.getElementById('blocked-progress').style.width = `${(data.blocked / total) * 100}%`;
+                }
+            })
+            .catch(error => {
+                console.error('Error updating progress:', error);
+            });
+    }
+    
+    // Save progress
+    saveProgressBtn.addEventListener('click', function() {
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-info alert-dismissible fade show position-fixed';
+        alert.style.top = '20px';
+        alert.style.right = '20px';
+        alert.style.zIndex = '9999';
+        alert.innerHTML = `
+            <i class="fas fa-save"></i> Progress saved successfully!
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.

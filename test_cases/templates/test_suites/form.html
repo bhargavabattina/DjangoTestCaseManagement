@@ -1,0 +1,722 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if test_suite %}Edit Test Suite{% else %}Create Test Suite{% endif %} - Test Case Management
+{% endblock %}
+
+{% block nav_test_suites %}active{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:test_suite_list' %}">Test Suites</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+            {% if test_suite %}Edit Test Suite{% else %}Create Test Suite{% endif %}
+        </li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">{% if test_suite %}Edit Test Suite: {{ test_suite.name }}{% else %}Create New Test Suite{% endif %}</h1>
+    <a href="{% url 'test_cases:test_suite_list' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Test Suites
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            {% if test_suite %}
+                <i class="fas fa-edit"></i> Edit Test Suite Details
+            {% else %}
+                <i class="fas fa-plus"></i> Test Suite Information
+            {% endif %}
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if test_suite %}
+        <div class="mb-4 p-3 border-start border-4 border-primary bg-light">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-info-circle text-primary me-2"></i>
+                <h6 class="mb-0">Test Suite Status:</h6>
+            </div>
+            <div class="d-flex align-items-center">
+                <span class="badge bg-info me-2">{{ test_suite.test_cases.count }} Test Cases</span>
+                <span class="text-muted">Created on {{ test_suite.created_date|date:"M d, Y H:i" }}</span>
+            </div>
+        </div>
+        {% endif %}
+
+        <form method="post" novalidate id="test-suite-form">
+            {% csrf_token %}
+            
+            <!-- Basic Test Suite Information -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0"><i class="fas fa-layer-group"></i> Basic Information</h6>
+                </div>
+                <div class="card-body">
+                    <!-- Test Suite Name -->
+                    <div class="mb-3">
+                        <label for="{{ form.name.id_for_label }}" class="form-label">{{ form.name.label }} *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.name.errors %}
+                                    <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">Provide a clear and descriptive name for the test suite.</div>
+                    </div>
+                    
+                    <!-- Description -->
+                    <div class="mb-3">
+                        <label for="{{ form.description.id_for_label }}" class="form-label">{{ form.description.label }}</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.description.errors %}
+                                    <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">Provide a detailed description of this test suite's purpose and scope.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Case Selection -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-tasks"></i> Test Case Selection
+                        <span class="badge bg-info ms-2" id="selected-count">0 selected</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <!-- Hierarchical Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="project-filter" class="form-label">Filter by Project</label>
+                            <select id="project-filter" class="form-control">
+                                <option value="">All Projects</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="epic-filter" class="form-label">Filter by Epic</label>
+                            <select id="epic-filter" class="form-control">
+                                <option value="">All Epics</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="story-filter" class="form-label">Filter by User Story</label>
+                            <select id="story-filter" class="form-control">
+                                <option value="">All User Stories</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Search and Quick Actions -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="testcase-search" class="form-label">Search Test Cases</label>
+                            <input type="text" id="testcase-search" class="form-control" placeholder="Search by name or description...">
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <button type="button" id="select-all-testcases" class="btn btn-outline-primary me-2">
+                                <i class="fas fa-check-square"></i> Select All
+                            </button>
+                            <button type="button" id="clear-all-testcases" class="btn btn-outline-secondary me-2">
+                                <i class="fas fa-square"></i> Clear All
+                            </button>
+                            <button type="button" id="toggle-view" class="btn btn-outline-info">
+                                <i class="fas fa-th-list"></i> List View
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Priority and Status Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label for="priority-filter" class="form-label">Priority</label>
+                            <select id="priority-filter" class="form-control">
+                                <option value="">All Priorities</option>
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="status-filter" class="form-label">Status</label>
+                            <select id="status-filter" class="form-control">
+                                <option value="">All Statuses</option>
+                                <option value="draft">Draft</option>
+                                <option value="ready">Ready</option>
+                                <option value="blocked">Blocked</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="automation-filter" class="form-label">Automation</label>
+                            <select id="automation-filter" class="form-control">
+                                <option value="">All Types</option>
+                                <option value="automated">Automated</option>
+                                <option value="manual">Manual</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button type="button" id="apply-filters" class="btn btn-primary w-100">
+                                <i class="fas fa-filter"></i> Apply Filters
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Test Cases Container -->
+                    <div id="testcases-container" class="border rounded p-3" style="min-height: 400px;">
+                        <!-- Available Test Cases -->
+                        <div id="available-testcases" class="mb-3">
+                            <h6><i class="fas fa-list"></i> Available Test Cases</h6>
+                            <div id="loading-testcases" class="text-center py-3">
+                                <i class="fas fa-spinner fa-spin"></i> Loading test cases...
+                            </div>
+                            <div id="testcases-list" class="row" style="display: none;">
+                                <!-- Test cases will be loaded here dynamically -->
+                            </div>
+                            <div id="no-testcases" class="text-center py-3 text-muted" style="display: none;">
+                                <i class="fas fa-exclamation-circle"></i>
+                                No test cases found. Please adjust your filters or create test cases first.
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <!-- Selected Test Cases with Drag and Drop -->
+                        <div id="selected-testcases-container">
+                            <h6><i class="fas fa-check-square"></i> Selected Test Cases <span class="badge bg-success" id="selected-badge">0</span></h6>
+                            <div class="form-text mb-3">Drag and drop to reorder the execution sequence</div>
+                            <div id="selected-testcases-list" class="sortable-list border rounded p-3 bg-light" style="min-height: 150px;">
+                                <div class="text-center py-3 text-muted" id="no-selected-message">
+                                    <i class="fas fa-hand-pointer"></i>
+                                    No test cases selected yet. Click on test cases above to add them.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hidden input for selected test cases -->
+                    {{ form.test_cases }}
+                    {% if form.test_cases.errors %}
+                        <div class="text-danger mt-1">
+                            {% for error in form.test_cases.errors %}
+                                <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Selected Test Cases Summary -->
+            <div id="selected-summary" class="card mb-4" style="display: none;">
+                <div class="card-header">
+                    <h6 class="card-title mb-0"><i class="fas fa-chart-pie"></i> Suite Summary</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-primary" id="total-testcases">0</h4>
+                                <small class="text-muted">Total Test Cases</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-success" id="estimated-time">0</h4>
+                                <small class="text-muted">Est. Time (hours)</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div id="priority-distribution">
+                                <!-- Priority distribution will be shown here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <button type="submit" class="btn btn-primary me-2" id="save-btn">
+                                <i class="fas fa-save"></i> {{ action|default:"Save" }} Test Suite
+                            </button>
+                            <button type="button" class="btn btn-success me-2" id="save-and-execute-btn" {% if not test_suite %}style="display: none;"{% endif %}>
+                                <i class="fas fa-play"></i> Save & Execute
+                            </button>
+                        </div>
+                        <div>
+                            <a href="{% url 'test_cases:test_suite_list' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Cancel
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Test Case Detail Modal -->
+<div class="modal fade" id="testcaseDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Test Case Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="testcase-detail-content">
+                    <!-- Content will be loaded dynamically -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="add-to-suite-btn">
+                    <i class="fas fa-plus"></i> Add to Suite
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SortableJS for drag and drop -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const projectFilter = document.getElementById('project-filter');
+    const epicFilter = document.getElementById('epic-filter');
+    const storyFilter = document.getElementById('story-filter');
+    const priorityFilter = document.getElementById('priority-filter');
+    const statusFilter = document.getElementById('status-filter');
+    const automationFilter = document.getElementById('automation-filter');
+    const testcaseSearch = document.getElementById('testcase-search');
+    const testcasesList = document.getElementById('testcases-list');
+    const loadingIndicator = document.getElementById('loading-testcases');
+    const noTestcasesMessage = document.getElementById('no-testcases');
+    const selectedTestcasesList = document.getElementById('selected-testcases-list');
+    const selectedCount = document.getElementById('selected-count');
+    const selectedBadge = document.getElementById('selected-badge');
+    const selectedSummary = document.getElementById('selected-summary');
+    const noSelectedMessage = document.getElementById('no-selected-message');
+    const testCasesInput = document.getElementById('{{ form.test_cases.id_for_label }}');
+    
+    let allTestcases = [];
+    let filteredTestcases = [];
+    let selectedTestcases = new Set();
+    let selectedTestcasesOrder = [];
+    let isListView = false;
+
+    // Initialize drag and drop
+    const sortable = Sortable.create(selectedTestcasesList, {
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+        onEnd: function(evt) {
+            updateSelectedOrder();
+        }
+    });
+
+    // Load initial data
+    loadProjects();
+    loadTestcases();
+    
+    // Initialize with existing test cases if editing
+    {% if test_suite %}
+        const existingTestCases = [
+            {% for tc in test_suite.test_cases.all %}
+                {{ tc.id }}{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ];
+        existingTestCases.forEach(id => {
+            selectedTestcases.add(id);
+            selectedTestcasesOrder.push(id);
+        });
+    {% endif %}
+
+    // Event listeners
+    projectFilter.addEventListener('change', function() {
+        loadEpics(this.value);
+        loadTestcases();
+    });
+
+    epicFilter.addEventListener('change', function() {
+        loadStories(this.value);
+        loadTestcases();
+    });
+
+    storyFilter.addEventListener('change', loadTestcases);
+    priorityFilter.addEventListener('change', applyFilters);
+    statusFilter.addEventListener('change', applyFilters);
+    automationFilter.addEventListener('change', applyFilters);
+
+    testcaseSearch.addEventListener('input', function() {
+        applyFilters();
+    });
+
+    document.getElementById('apply-filters').addEventListener('click', applyFilters);
+
+    document.getElementById('select-all-testcases').addEventListener('click', function() {
+        filteredTestcases.forEach(tc => {
+            if (!selectedTestcases.has(tc.id)) {
+                selectedTestcases.add(tc.id);
+                selectedTestcasesOrder.push(tc.id);
+            }
+        });
+        updateTestcaseDisplay();
+        updateSelectedTestcases();
+        updateSummary();
+    });
+
+    document.getElementById('clear-all-testcases').addEventListener('click', function() {
+        selectedTestcases.clear();
+        selectedTestcasesOrder = [];
+        updateTestcaseDisplay();
+        updateSelectedTestcases();
+        updateSummary();
+    });
+
+    document.getElementById('toggle-view').addEventListener('click', function() {
+        isListView = !isListView;
+        this.innerHTML = isListView ? 
+            '<i class="fas fa-th"></i> Grid View' : 
+            '<i class="fas fa-th-list"></i> List View';
+        updateTestcaseDisplay();
+    });
+
+    document.getElementById('save-and-execute-btn').addEventListener('click', function() {
+        const form = document.getElementById('test-suite-form');
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'save_and_execute';
+        input.value = 'true';
+        form.appendChild(input);
+        form.submit();
+    });
+
+    // Form submission handler
+    document.getElementById('test-suite-form').addEventListener('submit', function() {
+        updateTestCasesInput();
+    });
+
+    // Load projects
+    function loadProjects() {
+        fetch('{% url "test_cases:project_list" %}?format=json')
+            .then(response => response.json())
+            .then(data => {
+                projectFilter.innerHTML = '<option value="">All Projects</option>';
+                data.forEach(project => {
+                    const option = document.createElement('option');
+                    option.value = project.id;
+                    option.textContent = project.name;
+                    projectFilter.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading projects:', error);
+            });
+    }
+
+    // Load epics based on selected project
+    function loadEpics(projectId) {
+        epicFilter.innerHTML = '<option value="">All Epics</option>';
+        storyFilter.innerHTML = '<option value="">All User Stories</option>';
+        
+        if (!projectId) return;
+
+        fetch(`{% url "test_cases:get_epics_by_project" %}?project_id=${projectId}`)
+            .then(response => response.json())
+            .then(data => {
+                data.forEach(epic => {
+                    const option = document.createElement('option');
+                    option.value = epic.id;
+                    option.textContent = epic.name;
+                    epicFilter.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading epics:', error);
+            });
+    }
+
+    // Load stories based on selected epic
+    function loadStories(epicId) {
+        storyFilter.innerHTML = '<option value="">All User Stories</option>';
+        
+        if (!epicId) return;
+
+        fetch(`{% url "test_cases:get_stories_by_epic" %}?epic_id=${epicId}`)
+            .then(response => response.json())
+            .then(data => {
+                data.forEach(story => {
+                    const option = document.createElement('option');
+                    option.value = story.id;
+                    option.textContent = story.name;
+                    storyFilter.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading stories:', error);
+            });
+    }
+
+    // Load test cases
+    function loadTestcases() {
+        loadingIndicator.style.display = 'block';
+        testcasesList.style.display = 'none';
+        noTestcasesMessage.style.display = 'none';
+
+        const params = new URLSearchParams();
+        if (projectFilter.value) params.append('project_id', projectFilter.value);
+        if (epicFilter.value) params.append('epic_id', epicFilter.value);
+        if (storyFilter.value) params.append('story_id', storyFilter.value);
+
+        fetch(`{% url "test_cases:get_test_cases_by_filters" %}?${params}`)
+            .then(response => response.json())
+            .then(data => {
+                allTestcases = data;
+                applyFilters();
+                loadingIndicator.style.display = 'none';
+                updateSelectedTestcases();
+            })
+            .catch(error => {
+                console.error('Error loading test cases:', error);
+                loadingIndicator.style.display = 'none';
+                noTestcasesMessage.style.display = 'block';
+            });
+    }
+
+    // Apply filters
+    function applyFilters() {
+        const searchTerm = testcaseSearch.value.toLowerCase();
+        const priority = priorityFilter.value;
+        const status = statusFilter.value;
+        const automation = automationFilter.value;
+
+        filteredTestcases = allTestcases.filter(tc => {
+            const matchesSearch = !searchTerm || 
+                tc.name.toLowerCase().includes(searchTerm) ||
+                (tc.description && tc.description.toLowerCase().includes(searchTerm));
+            
+            const matchesPriority = !priority || tc.priority === priority;
+            const matchesStatus = !status || tc.status === status;
+            const matchesAutomation = !automation || 
+                (automation === 'automated' && tc.is_automated) ||
+                (automation === 'manual' && !tc.is_automated);
+
+            return matchesSearch && matchesPriority && matchesStatus && matchesAutomation;
+        });
+
+        updateTestcaseDisplay();
+    }
+
+    // Update test cases display
+    function updateTestcaseDisplay() {
+        if (filteredTestcases.length === 0) {
+            testcasesList.style.display = 'none';
+            noTestcasesMessage.style.display = 'block';
+            return;
+        }
+
+        noTestcasesMessage.style.display = 'none';
+        testcasesList.style.display = 'flex';
+        testcasesList.className = isListView ? 'list-group' : 'row';
+        testcasesList.innerHTML = '';
+        
+        filteredTestcases.forEach(tc => {
+            const isSelected = selectedTestcases.has(tc.id);
+            const cardClass = isListView ? 'list-group-item' : 'col-md-6 col-lg-4 mb-3';
+            
+            const div = document.createElement('div');
+            div.className = cardClass;
+            
+            if (isListView) {
+                div.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center ${isSelected ? 'bg-primary text-white' : ''} p-2 rounded testcase-item" data-testcase-id="${tc.id}">
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">${tc.name}</h6>
+                            <small class="${isSelected ? 'text-light' : 'text-muted'}">${tc.user_story_name || ''}</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-${getPriorityColor(tc.priority)}">${tc.priority}</span>
+                            <span class="badge bg-${getStatusColor(tc.status)}">${tc.status}</span>
+                            ${tc.is_automated ? '<i class="fas fa-robot ms-1" title="Automated"></i>' : ''}
+                        </div>
+                    </div>
+                `;
+            } else {
+                div.innerHTML = `
+                    <div class="card h-100 testcase-item ${isSelected ? 'border-primary bg-primary text-white' : ''}" data-testcase-id="${tc.id}">
+                        <div class="card-body">
+                            <h6 class="card-title">${tc.name}</h6>
+                            <p class="card-text small ${isSelected ? 'text-light' : 'text-muted'}">${tc.user_story_name || ''}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="badge bg-${getPriorityColor(tc.priority)}">${tc.priority}</span>
+                                    <span class="badge bg-${getStatusColor(tc.status)}">${tc.status}</span>
+                                </div>
+                                <div>
+                                    ${tc.is_automated ? '<i class="fas fa-robot" title="Automated"></i>' : '<i class="fas fa-user" title="Manual"></i>'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            const testcaseItem = div.querySelector('.testcase-item');
+            testcaseItem.style.cursor = 'pointer';
+            testcaseItem.addEventListener('click', function() {
+                toggleTestcaseSelection(tc.id);
+            });
+            
+            testcasesList.appendChild(div);
+        });
+
+        updateCounts();
+    }
+
+    // Toggle test case selection
+    function toggleTestcaseSelection(testcaseId) {
+        if (selectedTestcases.has(testcaseId)) {
+            selectedTestcases.delete(testcaseId);
+            selectedTestcasesOrder = selectedTestcasesOrder.filter(id => id !== testcaseId);
+        } else {
+            selectedTestcases.add(testcaseId);
+            selectedTestcasesOrder.push(testcaseId);
+        }
+        
+        updateTestcaseDisplay();
+        updateSelectedTestcases();
+        updateSummary();
+    }
+
+    // Update selected test cases display
+    function updateSelectedTestcases() {
+        if (selectedTestcases.size === 0) {
+            selectedTestcasesList.innerHTML = '';
+            selectedTestcasesList.appendChild(noSelectedMessage);
+            selectedSummary.style.display = 'none';
+            return;
+        }
+
+        selectedSummary.style.display = 'block';
+        selectedTestcasesList.innerHTML = '';
+        
+        selectedTestcasesOrder.forEach((testcaseId, index) => {
+            const tc = allTestcases.find(t => t.id === testcaseId);
+            if (!tc) return;
+            
+            const div = document.createElement('div');
+            div.className = 'selected-testcase-item card mb-2';
+            div.innerHTML = `
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center">
+                        <div class="drag-handle me-2" style="cursor: move;">
+                            <i class="fas fa-grip-vertical text-muted"></i>
+                        </div>
+                        <div class="order-number me-2">
+                            <span class="badge bg-secondary">${index + 1}</span>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">${tc.name}</h6>
+                            <small class="text-muted">${tc.user_story_name || ''}</small>
+                        </div>
+                        <div class="me-2">
+                            <span class="badge bg-${getPriorityColor(tc.priority)}">${tc.priority}</span>
+                            <span class="badge bg-${getStatusColor(tc.status)}">${tc.status}</span>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-outline-danger remove-testcase" data-testcase-id="${tc.id}">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            const removeBtn = div.querySelector('.remove-testcase');
+            removeBtn.addEventListener('click', function() {
+                toggleTestcaseSelection(tc.id);
+            });
+            
+            selectedTestcasesList.appendChild(div);
+        });
+
+        updateCounts();
+    }
+
+    // Update selected order after drag and drop
+    function updateSelectedOrder() {
+        const items = selectedTestcasesList.querySelectorAll('.selected-testcase-item');
+        selectedTestcasesOrder = Array.from(items).map(item => {
+            return parseInt(item.querySelector('.remove-testcase').dataset.testcaseId);
+        });
+        
+        // Update order numbers
+        items.forEach((item, index) => {
+            item.querySelector('.order-number .badge').textContent = index + 1;
+        });
+        
+        updateTestCasesInput();
+    }
+
+    // Update counts and summary
+    function updateCounts() {
+        const count = selectedTestcases.size;
+        selectedCount.textContent = `${count} selected`;
+        selectedBadge.textContent = count;
+    }
+
+    // Update summary
+    function updateSummary() {
+        const count = selectedTestcases.size;
+        document.getElementById('total-testcases').textContent = count;
+        
+        if (count === 0) {
+            selectedSummary.style.display = 'none';
+            return;
+        }
+
+        const selectedTcs = allTestcases.filter(tc => selectedTestcases.has(tc.id));
+        const priorityCounts = {};
+        let estimatedTime = 0;
+        
+        selectedTcs.forEach(tc => {
+            priorityCounts[tc.priority] = (priorityCounts[tc.priority] || 0) + 1;
+            estimatedTime += tc.estimated_time || 0.5; // Default 30 minutes per test case
+        });
+
+        document.getElementById('estimated-time').textContent = estimatedTime.toFixed(1);
+        
+        const distributionDiv = document.getElementById('priority-distribution');
+        let distributionHtml = '<small><strong>Priority Distribution:</strong><br>';
+        Object.entries(priorityCounts).forEach(([priority, count]) => {
+            distributionHtml += `<span class="badge bg-${getPriorityColor(priority)} me-1">${priority}: ${count}</span>`;
+        });
+        distributionHtml += '</small>';
+        distributionDiv.innerHTML = distributionHtml;
+    }
+
+    // Update hidden input with selected test cases
+    function updateTestCasesInput() {
+        const selectedIds = selectedTestcasesOrder.join(',');
+        

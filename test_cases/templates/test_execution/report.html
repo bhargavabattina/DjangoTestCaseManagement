@@ -1,0 +1,702 @@
+{% extends "base.html" %}
+
+{% block title %}Test Execution Report - Test Case Management{% endblock %}
+
+{% block nav_test_execution %}active{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:test_execution_dashboard' %}">Test Execution</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Execution Report</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Test Execution Report</h1>
+    <div>
+        <button id="print-report" class="btn btn-outline-secondary me-2">
+            <i class="fas fa-print"></i> Print
+        </button>
+        <div class="btn-group">
+            <button type="button" class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="fas fa-download"></i> Export
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#" id="export-excel">
+                    <i class="fas fa-file-excel"></i> Excel Report
+                </a></li>
+                <li><a class="dropdown-item" href="#" id="export-pdf">
+                    <i class="fas fa-file-pdf"></i> PDF Report
+                </a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="#" id="export-chart">
+                    <i class="fas fa-chart-bar"></i> Chart Image
+                </a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Advanced Filter Panel -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-filter"></i> Advanced Filters
+            <button class="btn btn-sm btn-outline-secondary ms-2" id="toggle-filters">
+                <i class="fas fa-chevron-up"></i>
+            </button>
+        </h5>
+    </div>
+    <div class="card-body" id="filter-panel">
+        <form method="get" id="report-filter-form">
+            <div class="row g-3">
+                <!-- Date Range Filters -->
+                <div class="col-md-3">
+                    <label for="{{ form.date_from.id_for_label }}" class="form-label">From Date</label>
+                    {{ form.date_from }}
+                </div>
+                <div class="col-md-3">
+                    <label for="{{ form.date_to.id_for_label }}" class="form-label">To Date</label>
+                    {{ form.date_to }}
+                </div>
+                
+                <!-- Project Hierarchy Filters -->
+                <div class="col-md-3">
+                    <label for="{{ form.project.id_for_label }}" class="form-label">Project</label>
+                    {{ form.project }}
+                </div>
+                <div class="col-md-3">
+                    <label for="{{ form.epic.id_for_label }}" class="form-label">Epic</label>
+                    {{ form.epic }}
+                </div>
+                
+                <!-- Status and Executor Filters -->
+                <div class="col-md-3">
+                    <label for="{{ form.status.id_for_label }}" class="form-label">Execution Status</label>
+                    {{ form.status }}
+                </div>
+                <div class="col-md-3">
+                    <label for="{{ form.executor.id_for_label }}" class="form-label">Executor</label>
+                    {{ form.executor }}
+                </div>
+                
+                <!-- Test Case Priority Filter -->
+                <div class="col-md-3">
+                    <label for="priority" class="form-label">Priority</label>
+                    <select class="form-control" id="priority" name="priority">
+                        <option value="">All Priorities</option>
+                        <option value="critical" {% if request.GET.priority == 'critical' %}selected{% endif %}>Critical</option>
+                        <option value="high" {% if request.GET.priority == 'high' %}selected{% endif %}>High</option>
+                        <option value="medium" {% if request.GET.priority == 'medium' %}selected{% endif %}>Medium</option>
+                        <option value="low" {% if request.GET.priority == 'low' %}selected{% endif %}>Low</option>
+                    </select>
+                </div>
+                
+                <!-- Quick Date Filters -->
+                <div class="col-md-3">
+                    <label class="form-label">Quick Date Range</label>
+                    <select class="form-control" id="quick-date-range">
+                        <option value="">Custom Range</option>
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="last-7-days">Last 7 Days</option>
+                        <option value="last-30-days">Last 30 Days</option>
+                        <option value="this-month">This Month</option>
+                        <option value="last-month">Last Month</option>
+                    </select>
+                </div>
+                
+                <!-- Filter Actions -->
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <button type="submit" class="btn btn-primary me-2">
+                                <i class="fas fa-search"></i> Apply Filters
+                            </button>
+                            <a href="{% url 'test_cases:test_execution_report' %}" class="btn btn-outline-secondary me-2">
+                                <i class="fas fa-times"></i> Clear All
+                            </a>
+                            <button type="button" id="save-filter" class="btn btn-outline-info">
+                                <i class="fas fa-bookmark"></i> Save Filter
+                            </button>
+                        </div>
+                        <div>
+                            <span class="text-muted" id="filter-summary">
+                                <!-- Filter summary will be populated by JavaScript -->
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Summary Statistics -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-chart-pie"></i> Summary Statistics
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <div class="card bg-primary text-white h-100">
+                            <div class="card-body text-center">
+                                <i class="fas fa-play-circle fa-2x mb-2"></i>
+                                <h4 id="total-executions">{{ executions.paginator.count }}</h4>
+                                <p class="card-text mb-0">Total Executions</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card bg-success text-white h-100">
+                            <div class="card-body text-center">
+                                <i class="fas fa-check-circle fa-2x mb-2"></i>
+                                <h4 id="passed-executions">0</h4>
+                                <p class="card-text mb-0">Passed</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card bg-danger text-white h-100">
+                            <div class="card-body text-center">
+                                <i class="fas fa-times-circle fa-2x mb-2"></i>
+                                <h4 id="failed-executions">0</h4>
+                                <p class="card-text mb-0">Failed</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card bg-info text-white h-100">
+                            <div class="card-body text-center">
+                                <i class="fas fa-percentage fa-2x mb-2"></i>
+                                <h4 id="pass-rate">0%</h4>
+                                <p class="card-text mb-0">Pass Rate</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="card-title">Execution Metrics</h6>
+                        <div class="mb-2">
+                            <small class="text-muted">Average Execution Time:</small>
+                            <span class="float-end fw-bold" id="avg-execution-time">0 min</span>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">Total Execution Time:</small>
+                            <span class="float-end fw-bold" id="total-execution-time">0 min</span>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">Unique Executors:</small>
+                            <span class="float-end fw-bold" id="unique-executors">0</span>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">Date Range:</small>
+                            <span class="float-end fw-bold" id="date-range">All Time</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row mb-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-line"></i> Execution Trends
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="trendsChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-doughnut"></i> Status Distribution
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="statusChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Project Breakdown -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-project-diagram"></i> Project-wise Breakdown
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped" id="project-breakdown-table">
+                <thead>
+                    <tr>
+                        <th>Project</th>
+                        <th>Total Executions</th>
+                        <th>Pass Rate</th>
+                        <th>Avg Time (min)</th>
+                        <th>Last Execution</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Data will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Execution Results Table -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-table"></i> Execution Results
+            <span class="badge bg-secondary ms-2">{{ executions.paginator.count }} results</span>
+        </h5>
+        <div>
+            <div class="btn-group me-2">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-sort"></i> Sort
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item sort-option" href="#" data-sort="execution_date">Execution Date</a></li>
+                    <li><a class="dropdown-item sort-option" href="#" data-sort="testcase_name">Test Case Name</a></li>
+                    <li><a class="dropdown-item sort-option" href="#" data-sort="status">Status</a></li>
+                    <li><a class="dropdown-item sort-option" href="#" data-sort="executor">Executor</a></li>
+                    <li><a class="dropdown-item sort-option" href="#" data-sort="execution_time">Execution Time</a></li>
+                </ul>
+            </div>
+            <button id="toggle-columns" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-columns"></i> Columns
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if executions %}
+            <div class="table-responsive">
+                <table class="table table-hover" id="executions-table">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>
+                                <input type="checkbox" id="select-all-executions" class="form-check-input">
+                            </th>
+                            <th class="sortable" data-sort="testcase">Test Case</th>
+                            <th class="sortable" data-sort="test_run">Test Run</th>
+                            <th class="sortable" data-sort="status">Status</th>
+                            <th class="sortable" data-sort="executor">Executor</th>
+                            <th class="sortable" data-sort="execution_date">Execution Date</th>
+                            <th class="sortable" data-sort="execution_time">Duration</th>
+                            <th class="column-toggle" data-column="priority">Priority</th>
+                            <th class="column-toggle" data-column="project">Project</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for execution in executions %}
+                        <tr data-execution-id="{{ execution.id }}" class="execution-row">
+                            <td>
+                                <input type="checkbox" class="form-check-input execution-checkbox" value="{{ execution.id }}">
+                            </td>
+                            <td>
+                                <div>
+                                    <strong>{{ execution.testcase.name|truncatechars:50 }}</strong>
+                                    <br>
+                                    <small class="text-muted">{{ execution.testcase.user_story.name|truncatechars:40 }}</small>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-info">{{ execution.test_run.name|truncatechars:30 }}</span>
+                            </td>
+                            <td>
+                                {% if execution.status == 'passed' %}
+                                    <span class="badge bg-success">
+                                        <i class="fas fa-check"></i> Passed
+                                    </span>
+                                {% elif execution.status == 'failed' %}
+                                    <span class="badge bg-danger">
+                                        <i class="fas fa-times"></i> Failed
+                                    </span>
+                                {% elif execution.status == 'skipped' %}
+                                    <span class="badge bg-warning">
+                                        <i class="fas fa-forward"></i> Skipped
+                                    </span>
+                                {% elif execution.status == 'blocked' %}
+                                    <span class="badge bg-dark">
+                                        <i class="fas fa-ban"></i> Blocked
+                                    </span>
+                                {% elif execution.status == 'in_progress' %}
+                                    <span class="badge bg-primary">
+                                        <i class="fas fa-spinner fa-spin"></i> In Progress
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary">
+                                        <i class="fas fa-clock"></i> Not Executed
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if execution.executor %}
+                                    <div class="d-flex align-items-center">
+                                        <div class="avatar-sm bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 30px; height: 30px;">
+                                            {{ execution.executor.first_name|first|default:execution.executor.username|first }}
+                                        </div>
+                                        <div>
+                                            <small class="fw-bold">{{ execution.executor.get_full_name|default:execution.executor.username }}</small>
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted">Unassigned</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if execution.execution_date %}
+                                    <div>
+                                        {{ execution.execution_date|date:"M d, Y" }}
+                                        <br>
+                                        <small class="text-muted">{{ execution.execution_date|date:"H:i" }}</small>
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted">Not executed</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if execution.execution_time_minutes %}
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-clock text-muted me-1"></i>
+                                        <span>{{ execution.execution_time_minutes }} min</span>
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="column-toggle" data-column="priority">
+                                {% if execution.testcase.priority == 'critical' %}
+                                    <span class="badge bg-danger">Critical</span>
+                                {% elif execution.testcase.priority == 'high' %}
+                                    <span class="badge bg-warning">High</span>
+                                {% elif execution.testcase.priority == 'medium' %}
+                                    <span class="badge bg-primary">Medium</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Low</span>
+                                {% endif %}
+                            </td>
+                            <td class="column-toggle" data-column="project">
+                                <small>{{ execution.testcase.user_story.epic.project.name|truncatechars:20 }}</small>
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <a href="{% url 'test_cases:test_execution_detail' execution.pk %}" 
+                                       class="btn btn-sm btn-outline-primary" 
+                                       title="View Details">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <button class="btn btn-sm btn-outline-info drill-down-btn" 
+                                            data-execution-id="{{ execution.id }}"
+                                            title="Drill Down">
+                                        <i class="fas fa-search-plus"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if executions.has_other_pages %}
+                <nav aria-label="Execution results pagination" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        {% if executions.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page=1{{ request.GET.urlencode }}">First</a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ executions.previous_page_number }}{{ request.GET.urlencode }}">Previous</a>
+                            </li>
+                        {% endif %}
+
+                        {% for num in executions.paginator.page_range %}
+                            {% if executions.number == num %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ num }}</span>
+                                </li>
+                            {% elif num > executions.number|add:'-3' and num < executions.number|add:'3' %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ num }}{{ request.GET.urlencode }}">{{ num }}</a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if executions.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ executions.next_page_number }}{{ request.GET.urlencode }}">Next</a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ executions.paginator.num_pages }}{{ request.GET.urlencode }}">Last</a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            {% endif %}
+
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">No Execution Results Found</h4>
+                <p class="text-muted">
+                    {% if request.GET %}
+                        No executions match your current filters.
+                        <a href="{% url 'test_cases:test_execution_report' %}">Clear filters</a> to see all results.
+                    {% else %}
+                        No test executions have been recorded yet.
+                    {% endif %}
+                </p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Drill Down Modal -->
+<div class="modal fade" id="drillDownModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Execution Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="drill-down-content">
+                    <!-- Content will be loaded dynamically -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="#" id="view-full-execution" class="btn btn-primary">
+                    <i class="fas fa-external-link-alt"></i> View Full Details
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Column Visibility Modal -->
+<div class="modal fade" id="columnModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Column Visibility</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-check">
+                    <input class="form-check-input column-checkbox" type="checkbox" id="col-priority" data-column="priority" checked>
+                    <label class="form-check-label" for="col-priority">Priority</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input column-checkbox" type="checkbox" id="col-project" data-column="project" checked>
+                    <label class="form-check-label" for="col-project">Project</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="apply-column-settings">Apply</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Load Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize components
+    initializeCharts();
+    initializeFilters();
+    initializeTable();
+    loadSummaryData();
+    loadProjectBreakdown();
+    
+    // Chart instances
+    let trendsChart, statusChart;
+    
+    function initializeCharts() {
+        // Trends Chart
+        const trendsCtx = document.getElementById('trendsChart').getContext('2d');
+        trendsChart = new Chart(trendsCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Total Executions',
+                    data: [],
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1
+                }, {
+                    label: 'Passed',
+                    data: [],
+                    borderColor: 'rgb(40, 167, 69)',
+                    backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                    tension: 0.1
+                }, {
+                    label: 'Failed',
+                    data: [],
+                    borderColor: 'rgb(220, 53, 69)',
+                    backgroundColor: 'rgba(220, 53, 69, 0.2)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        
+        // Status Chart
+        const statusCtx = document.getElementById('statusChart').getContext('2d');
+        statusChart = new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Passed', 'Failed', 'Skipped', 'Blocked', 'In Progress', 'Not Executed'],
+                datasets: [{
+                    data: [0, 0, 0, 0, 0, 0],
+                    backgroundColor: [
+                        '#28a745',
+                        '#dc3545',
+                        '#ffc107',
+                        '#6c757d',
+                        '#007bff',
+                        '#6f42c1'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                    }
+                }
+            }
+        });
+    }
+    
+    function initializeFilters() {
+        // Filter toggle
+        document.getElementById('toggle-filters').addEventListener('click', function() {
+            const panel = document.getElementById('filter-panel');
+            const icon = this.querySelector('i');
+            
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-up');
+            } else {
+                panel.style.display = 'none';
+                icon.classList.remove('fa-chevron-up');
+                icon.classList.add('fa-chevron-down');
+            }
+        });
+        
+        // Quick date range selection
+        document.getElementById('quick-date-range').addEventListener('change', function() {
+            const value = this.value;
+            const dateFrom = document.getElementById('{{ form.date_from.id_for_label }}');
+            const dateTo = document.getElementById('{{ form.date_to.id_for_label }}');
+            
+            const today = new Date();
+            const formatDate = (date) => date.toISOString().split('T')[0];
+            
+            switch (value) {
+                case 'today':
+                    dateFrom.value = formatDate(today);
+                    dateTo.value = formatDate(today);
+                    break;
+                case 'yesterday':
+                    const yesterday = new Date(today);
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    dateFrom.value = formatDate(yesterday);
+                    dateTo.value = formatDate(yesterday);
+                    break;
+                case 'last-7-days':
+                    const last7Days = new Date(today);
+                    last7Days.setDate(last7Days.getDate() - 7);
+                    dateFrom.value = formatDate(last7Days);
+                    dateTo.value = formatDate(today);
+                    break;
+                case 'last-30-days':
+                    const last30Days = new Date(today);
+                    last30Days.setDate(last30Days.getDate() - 30);
+                    dateFrom.value = formatDate(last30Days);
+                    dateTo.value = formatDate(today);
+                    break;
+                case 'this-month':
+                    const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                    dateFrom.value = formatDate(thisMonthStart);
+                    dateTo.value = formatDate(today);
+                    break;
+                case 'last-month':
+                    const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                    const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+                    dateFrom.value = formatDate(lastMonthStart);
+                    dateTo.value = formatDate(lastMonthEnd);
+                    break;
+            }
+        });
+        
+        // Auto-submit on filter changes
+        document.querySelectorAll('#report-filter-form select, #report-filter-form input[type="date"]').forEach(element => {
+            element.addEventListener('change', function() {
+                if (this.id !== 'quick-date-range') {
+                    updateFilterSummary();
+                }
+            });
+        });
+        
+        updateFilterSummary();
+    }
+    
+    function updateFilterSummary() {
+        const form = document.getElementById('report-filter-form');
+        const formData = new FormData(form);
+        let filters = [];
+        
+        for (let [key, value] of formData.entries()) {
+            if (value && key !== 'csrfmiddlewaretoken') {

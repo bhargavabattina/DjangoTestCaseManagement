@@ -40,7 +40,32 @@ urlpatterns = [
     # Excel Import URLs
     path('testcases/import/', views.testcase_import, name='testcase_import'),
     
+    # Test Run URLs
+    path('test-runs/', views.test_run_list, name='test_run_list'),
+    path('test-runs/create/', views.test_run_create, name='test_run_create'),
+    path('test-runs/<int:pk>/edit/', views.test_run_edit, name='test_run_edit'),
+    path('test-runs/<int:pk>/delete/', views.test_run_delete, name='test_run_delete'),
+    path('test-runs/<int:pk>/execute/', views.test_run_execute, name='test_run_execute'),
+    
+    # Test Execution URLs
+    path('test-execution/dashboard/', views.test_execution_dashboard, name='test_execution_dashboard'),
+    path('test-execution/<int:pk>/detail/', views.test_execution_detail, name='test_execution_detail'),
+    path('test-execution/<int:pk>/record/', views.test_execution_record, name='test_execution_record'),
+    path('test-execution/report/', views.test_execution_report, name='test_execution_report'),
+    path('test-execution/export/', views.test_execution_export, name='test_execution_export'),
+    
+    # Test Suite URLs
+    path('test-suites/', views.test_suite_list, name='test_suite_list'),
+    path('test-suites/create/', views.test_suite_create, name='test_suite_create'),
+    path('test-suites/<int:pk>/edit/', views.test_suite_edit, name='test_suite_edit'),
+    path('test-suites/<int:pk>/delete/', views.test_suite_delete, name='test_suite_delete'),
+    
+    # Bulk Operations URLs
+    path('bulk/test-execution/', views.bulk_test_execution, name='bulk_test_execution'),
+    
     # AJAX URLs for dynamic dropdowns
     path('ajax/epics-by-project/', views.get_epics_by_project, name='get_epics_by_project'),
     path('ajax/stories-by-epic/', views.get_stories_by_epic, name='get_stories_by_epic'),
+    path('ajax/testcases-by-filters/', views.get_test_cases_by_filters, name='get_test_cases_by_filters'),
+    path('ajax/execution-stats/', views.get_execution_stats, name='get_execution_stats'),
 ]

@@ -1,0 +1,775 @@
+{% extends "base.html" %}
+
+{% block title %}Test Execution Dashboard - Test Case Management{% endblock %}
+
+{% block nav_test_execution %}active{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Test Execution Dashboard</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Test Execution Dashboard</h1>
+    <div>
+        <button id="refresh-data" class="btn btn-outline-primary me-2">
+            <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+        <a href="{% url 'test_cases:test_execution_report' %}" class="btn btn-primary">
+            <i class="fas fa-chart-bar"></i> View Reports
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Date Range Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" id="filter-form" class="row g-3">
+            <div class="col-md-3">
+                <label for="date_from" class="form-label">From Date</label>
+                <input type="date" class="form-control" id="date_from" name="date_from" 
+                       value="{{ request.GET.date_from }}">
+            </div>
+            <div class="col-md-3">
+                <label for="date_to" class="form-label">To Date</label>
+                <input type="date" class="form-control" id="date_to" name="date_to" 
+                       value="{{ request.GET.date_to }}">
+            </div>
+            <div class="col-md-3">
+                <label for="project_filter" class="form-label">Project</label>
+                <select class="form-control" id="project_filter" name="project">
+                    <option value="">All Projects</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary me-2">
+                    <i class="fas fa-filter"></i> Apply Filter
+                </button>
+                <button type="button" id="export-btn" class="btn btn-success">
+                    <i class="fas fa-download"></i> Export
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Key Metrics Cards -->
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card bg-primary text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="card-title">Total Executions</h5>
+                        <h2 class="display-4" id="total-executions">{{ total_executions }}</h2>
+                        <p class="card-text">All time executions</p>
+                    </div>
+                    <div class="text-end">
+                        <i class="fas fa-play-circle fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-primary-dark">
+                <small><i class="fas fa-calendar"></i> Last 30 days: {{ recent_executions }}</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card bg-success text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="card-title">Pass Rate</h5>
+                        <h2 class="display-4" id="pass-rate">{{ pass_rate }}%</h2>
+                        <p class="card-text">Overall success rate</p>
+                    </div>
+                    <div class="text-end">
+                        <i class="fas fa-check-circle fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-success-dark">
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar bg-white" role="progressbar" 
+                         style="width: {{ pass_rate }}%" aria-valuenow="{{ pass_rate }}" 
+                         aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card bg-info text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="card-title">Avg Execution Time</h5>
+                        <h2 class="display-4" id="avg-time">{{ avg_execution_time }}</h2>
+                        <p class="card-text">Minutes per test</p>
+                    </div>
+                    <div class="text-end">
+                        <i class="fas fa-clock fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-info-dark">
+                <small><i class="fas fa-stopwatch"></i> Efficiency metric</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card bg-warning text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="card-title">Active Test Runs</h5>
+                        <h2 class="display-4" id="active-runs">0</h2>
+                        <p class="card-text">Currently running</p>
+                    </div>
+                    <div class="text-end">
+                        <i class="fas fa-running fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-warning-dark">
+                <small><i class="fas fa-spinner fa-spin"></i> Real-time updates</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row mb-4">
+    <!-- Execution Trends Chart -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-line"></i> Execution Trends (Last 30 Days)
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="trendsChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Status Distribution Chart -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-pie"></i> Execution Status Distribution
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="statusChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Project-wise Breakdown and Performance Metrics -->
+<div class="row mb-4">
+    <!-- Project-wise Execution Breakdown -->
+    <div class="col-lg-8 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-project-diagram"></i> Project-wise Execution Breakdown
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped" id="project-breakdown-table">
+                        <thead>
+                            <tr>
+                                <th>Project</th>
+                                <th>Total</th>
+                                <th>Passed</th>
+                                <th>Failed</th>
+                                <th>Pass Rate</th>
+                                <th>Avg Time</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="project-breakdown-body">
+                            <!-- Data will be loaded dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Assignee Performance -->
+    <div class="col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-users"></i> Top Performers
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="assignee-performance">
+                    <!-- Data will be loaded dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Executions -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-history"></i> Recent Executions
+                </h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary me-2" id="refresh-executions">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                    <a href="{% url 'test_cases:test_execution_report' %}" class="btn btn-sm btn-primary">
+                        View All <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="recent-executions-table">
+                        <thead>
+                            <tr>
+                                <th>Test Case</th>
+                                <th>Test Run</th>
+                                <th>Status</th>
+                                <th>Executor</th>
+                                <th>Execution Date</th>
+                                <th>Duration</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-executions-body">
+                            {% for execution in recent_timeline %}
+                            <tr>
+                                <td>
+                                    <div>
+                                        <strong>{{ execution.testcase.name|truncatechars:40 }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ execution.testcase.user_story.name|truncatechars:30 }}</small>
+                                    </div>
+                                </td>
+                                <td>{{ execution.test_run.name|truncatechars:30 }}</td>
+                                <td>
+                                    {% if execution.status == 'passed' %}
+                                        <span class="badge bg-success">Passed</span>
+                                    {% elif execution.status == 'failed' %}
+                                        <span class="badge bg-danger">Failed</span>
+                                    {% elif execution.status == 'skipped' %}
+                                        <span class="badge bg-warning">Skipped</span>
+                                    {% elif execution.status == 'blocked' %}
+                                        <span class="badge bg-dark">Blocked</span>
+                                    {% elif execution.status == 'in_progress' %}
+                                        <span class="badge bg-primary">In Progress</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Not Executed</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if execution.executor %}
+                                        {{ execution.executor.get_full_name|default:execution.executor.username }}
+                                    {% else %}
+                                        <span class="text-muted">Unassigned</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if execution.execution_date %}
+                                        {{ execution.execution_date|date:"M d, Y H:i" }}
+                                    {% else %}
+                                        <span class="text-muted">Not executed</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if execution.execution_time_minutes %}
+                                        {{ execution.execution_time_minutes }} min
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{% url 'test_cases:test_execution_detail' execution.pk %}" 
+                                           class="btn btn-sm btn-outline-primary" title="View Details">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{% url 'test_cases:test_run_execute' execution.test_run.pk %}" 
+                                           class="btn btn-sm btn-outline-success" title="Execute">
+                                            <i class="fas fa-play"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">
+                                    <i class="fas fa-info-circle"></i> No recent executions found
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Execution Time Analysis -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-bar"></i> Execution Time Analysis
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="timeAnalysisChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Load Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize charts and data
+    initializeCharts();
+    loadProjectBreakdown();
+    loadAssigneePerformance();
+    startRealTimeUpdates();
+    
+    // Event listeners
+    document.getElementById('refresh-data').addEventListener('click', refreshAllData);
+    document.getElementById('refresh-executions').addEventListener('click', loadRecentExecutions);
+    document.getElementById('export-btn').addEventListener('click', exportData);
+    document.getElementById('filter-form').addEventListener('submit', applyFilters);
+    
+    // Date filter auto-submit
+    document.getElementById('date_from').addEventListener('change', function() {
+        if (document.getElementById('date_to').value) {
+            document.getElementById('filter-form').submit();
+        }
+    });
+    
+    document.getElementById('date_to').addEventListener('change', function() {
+        if (document.getElementById('date_from').value) {
+            document.getElementById('filter-form').submit();
+        }
+    });
+    
+    let trendsChart, statusChart, timeAnalysisChart;
+    
+    function initializeCharts() {
+        // Execution Trends Chart
+        const trendsCtx = document.getElementById('trendsChart').getContext('2d');
+        trendsChart = new Chart(trendsCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Total Executions',
+                    data: [],
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1
+                }, {
+                    label: 'Passed',
+                    data: [],
+                    borderColor: 'rgb(40, 167, 69)',
+                    backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                    tension: 0.1
+                }, {
+                    label: 'Failed',
+                    data: [],
+                    borderColor: 'rgb(220, 53, 69)',
+                    backgroundColor: 'rgba(220, 53, 69, 0.2)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                    }
+                }
+            }
+        });
+        
+        // Status Distribution Chart
+        const statusCtx = document.getElementById('statusChart').getContext('2d');
+        statusChart = new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys({{ status_counts|safe }}),
+                datasets: [{
+                    data: Object.values({{ status_counts|safe }}),
+                    backgroundColor: [
+                        '#28a745', // Passed - Green
+                        '#dc3545', // Failed - Red
+                        '#ffc107', // Skipped - Yellow
+                        '#6c757d', // Blocked - Gray
+                        '#007bff', // In Progress - Blue
+                        '#6f42c1'  // Not Executed - Purple
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                    }
+                }
+            }
+        });
+        
+        // Execution Time Analysis Chart
+        const timeCtx = document.getElementById('timeAnalysisChart').getContext('2d');
+        timeAnalysisChart = new Chart(timeCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Average Execution Time (minutes)',
+                    data: [],
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Minutes'
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    function loadTrendsData() {
+        fetch('{% url "test_cases:test_execution_dashboard" %}?format=trends')
+            .then(response => response.json())
+            .then(data => {
+                trendsChart.data.labels = data.labels;
+                trendsChart.data.datasets[0].data = data.total;
+                trendsChart.data.datasets[1].data = data.passed;
+                trendsChart.data.datasets[2].data = data.failed;
+                trendsChart.update();
+            })
+            .catch(error => console.error('Error loading trends data:', error));
+    }
+    
+    function loadProjectBreakdown() {
+        fetch('{% url "test_cases:test_execution_dashboard" %}?format=projects')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.getElementById('project-breakdown-body');
+                tbody.innerHTML = '';
+                
+                data.forEach(project => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>
+                            <strong>${project.name}</strong>
+                            <br>
+                            <small class="text-muted">${project.description || 'No description'}</small>
+                        </td>
+                        <td><span class="badge bg-primary">${project.total_executions}</span></td>
+                        <td><span class="badge bg-success">${project.passed_executions}</span></td>
+                        <td><span class="badge bg-danger">${project.failed_executions}</span></td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                                    <div class="progress-bar bg-success" role="progressbar" 
+                                         style="width: ${project.pass_rate}%"></div>
+                                </div>
+                                <small>${project.pass_rate.toFixed(1)}%</small>
+                            </div>
+                        </td>
+                        <td>${project.avg_execution_time ? project.avg_execution_time.toFixed(1) + ' min' : '-'}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="drillDownProject(${project.id})">
+                                <i class="fas fa-search-plus"></i> Details
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            })
+            .catch(error => console.error('Error loading project breakdown:', error));
+    }
+    
+    function loadAssigneePerformance() {
+        fetch('{% url "test_cases:test_execution_dashboard" %}?format=assignees')
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('assignee-performance');
+                container.innerHTML = '';
+                
+                data.forEach((assignee, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'mb-3';
+                    div.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <strong>${assignee.name}</strong>
+                            <span class="badge bg-${index < 3 ? 'success' : 'secondary'}">${assignee.executions_count}</span>
+                        </div>
+                        <div class="progress mb-1" style="height: 8px;">
+                            <div class="progress-bar bg-success" role="progressbar" 
+                                 style="width: ${assignee.pass_rate}%"
+                                 title="Pass Rate: ${assignee.pass_rate.toFixed(1)}%"></div>
+                        </div>
+                        <small class="text-muted">
+                            ${assignee.pass_rate.toFixed(1)}% pass rate • 
+                            ${assignee.avg_time ? assignee.avg_time.toFixed(1) + ' min avg' : 'No time data'}
+                        </small>
+                    `;
+                    container.appendChild(div);
+                });
+            })
+            .catch(error => console.error('Error loading assignee performance:', error));
+    }
+    
+    function loadRecentExecutions() {
+        const button = document.getElementById('refresh-executions');
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+        button.disabled = true;
+        
+        fetch('{% url "test_cases:test_execution_dashboard" %}?format=recent')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.getElementById('recent-executions-body');
+                tbody.innerHTML = '';
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" class="text-center text-muted">
+                                <i class="fas fa-info-circle"></i> No recent executions found
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                data.forEach(execution => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>
+                            <div>
+                                <strong>${execution.testcase_name}</strong>
+                                <br>
+                                <small class="text-muted">${execution.user_story_name}</small>
+                            </div>
+                        </td>
+                        <td>${execution.test_run_name}</td>
+                        <td>
+                            <span class="badge bg-${getStatusColor(execution.status)}">${execution.status_display}</span>
+                        </td>
+                        <td>${execution.executor_name || '<span class="text-muted">Unassigned</span>'}</td>
+                        <td>${execution.execution_date ? new Date(execution.execution_date).toLocaleString() : '<span class="text-muted">Not executed</span>'}</td>
+                        <td>${execution.execution_time_minutes ? execution.execution_time_minutes + ' min' : '<span class="text-muted">-</span>'}</td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <a href="/test-execution/${execution.id}/detail/" class="btn btn-sm btn-outline-primary" title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="/test-runs/${execution.test_run_id}/execute/" class="btn btn-sm btn-outline-success" title="Execute">
+                                    <i class="fas fa-play"></i>
+                                </a>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading recent executions:', error);
+                const tbody = document.getElementById('recent-executions-body');
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="text-center text-danger">
+                            <i class="fas fa-exclamation-triangle"></i> Error loading data. Please try again.
+                        </td>
+                    </tr>
+                `;
+            })
+            .finally(() => {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            });
+    }
+    
+    function refreshAllData() {
+        const button = document.getElementById('refresh-data');
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+        button.disabled = true;
+        
+        Promise.all([
+            loadTrendsData(),
+            loadProjectBreakdown(),
+            loadAssigneePerformance(),
+            loadRecentExecutions(),
+            updateMetrics()
+        ]).finally(() => {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        });
+    }
+    
+    function updateMetrics() {
+        fetch('{% url "test_cases:test_execution_dashboard" %}?format=metrics')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('total-executions').textContent = data.total_executions;
+                document.getElementById('pass-rate').textContent = data.pass_rate.toFixed(1) + '%';
+                document.getElementById('avg-time').textContent = data.avg_execution_time.toFixed(1);
+                document.getElementById('active-runs').textContent = data.active_runs;
+            })
+            .catch(error => console.error('Error updating metrics:', error));
+    }
+    
+    function startRealTimeUpdates() {
+        // Update metrics every 30 seconds
+        setInterval(updateMetrics, 30000);
+        
+        // Update recent executions every 2 minutes
+        setInterval(loadRecentExecutions, 120000);
+    }
+    
+    function applyFilters(e) {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const params = new URLSearchParams(formData);
+        
+        // Reload page with filters
+        window.location.href = '?' + params.toString();
+    }
+    
+    function exportData() {
+        const dateFrom = document.getElementById('date_from').value;
+        const dateTo = document.getElementById('date_to').value;
+        const project = document.getElementById('project_filter').value;
+        
+        const params = new URLSearchParams();
+        if (dateFrom) params.append('date_from', dateFrom);
+        if (dateTo) params.append('date_to', dateTo);
+        if (project) params.append('project', project);
+        
+        window.location.href = '{% url "test_cases:test_execution_export" %}?' + params.toString();
+    }
+    
+    function drillDownProject(projectId) {
+        window.location.href = `{% url "test_cases:test_execution_report" %}?project=${projectId}`;
+    }
+    
+    function getStatusColor(status) {
+        const colors = {
+            'passed': 'success',
+            'failed': 'danger',
+            'skipped': 'warning',
+            'blocked': 'dark',
+            'in_progress': 'primary',
+            'not_executed': 'secondary'
+        };
+        return colors[status] || 'secondary';
+    }
+    
+    // Load initial data
+    loadTrendsData();
+});
+</script>
+
+<style>
+.bg-primary-dark {
+    background-color: rgba(0, 123, 255, 0.8) !important;
+}
+
+.bg-success-dark {
+    background-color: rgba(40, 167, 69, 0.8) !important;
+}
+
+.bg-info-dark {
+    background-color: rgba(23, 162, 184, 0.8) !important;
+}
+
+.bg-warning-dark {
+    background-color: rgba(255, 193, 7, 0.8) !important;
+}
+
+.opacity-50 {
+    opacity: 0.5;
+}
+
+.card .card-body canvas {
+    max-height: 300px;
+}
+
+#timeAnalysisChart {
+    max-height: 200px;
+}
+
+.progress {
+    background-color: #e9ecef;
+}
+
+@media (max-width: 768px) {
+    .display-4 {
+        font-size: 2rem;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+    
+    .btn-group .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+}
+</style>
+{% endblock %}

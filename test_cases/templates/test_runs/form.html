@@ -1,0 +1,547 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if test_run %}Edit Test Run{% else %}Create Test Run{% endif %} - Test Case Management
+{% endblock %}
+
+{% block nav_test_runs %}active{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:test_run_list' %}">Test Runs</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+            {% if test_run %}Edit Test Run{% else %}Create Test Run{% endif %}
+        </li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">{% if test_run %}Edit Test Run: {{ test_run.name }}{% else %}Create New Test Run{% endif %}</h1>
+    <a href="{% url 'test_cases:test_run_list' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Test Runs
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            {% if test_run %}
+                <i class="fas fa-edit"></i> Edit Test Run Details
+            {% else %}
+                <i class="fas fa-plus"></i> Test Run Information
+            {% endif %}
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if test_run %}
+        <div class="mb-4 p-3 border-start border-4 border-primary bg-light">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-info-circle text-primary me-2"></i>
+                <h6 class="mb-0">Test Run Status:</h6>
+            </div>
+            <div class="d-flex align-items-center">
+                {% if test_run.status == 'not_started' %}
+                    <span class="badge bg-secondary me-2">Not Started</span>
+                {% elif test_run.status == 'in_progress' %}
+                    <span class="badge bg-primary me-2">In Progress</span>
+                {% elif test_run.status == 'completed' %}
+                    <span class="badge bg-success me-2">Completed</span>
+                {% elif test_run.status == 'cancelled' %}
+                    <span class="badge bg-danger me-2">Cancelled</span>
+                {% endif %}
+                <span class="text-muted">Created on {{ test_run.created_date|date:"M d, Y H:i" }}</span>
+            </div>
+        </div>
+        {% endif %}
+
+        <form method="post" novalidate id="test-run-form">
+            {% csrf_token %}
+            
+            <!-- Basic Test Run Information -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0"><i class="fas fa-clipboard-list"></i> Basic Information</h6>
+                </div>
+                <div class="card-body">
+                    <!-- Test Run Name -->
+                    <div class="mb-3">
+                        <label for="{{ form.name.id_for_label }}" class="form-label">{{ form.name.label }} *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.name.errors %}
+                                    <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">Provide a clear and descriptive name for the test run.</div>
+                    </div>
+                    
+                    <!-- Description -->
+                    <div class="mb-3">
+                        <label for="{{ form.description.id_for_label }}" class="form-label">{{ form.description.label }}</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.description.errors %}
+                                    <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">Provide a detailed description of this test run's purpose and scope.</div>
+                    </div>
+
+                    <!-- Status and Scheduled Date Row -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.status.id_for_label }}" class="form-label">{{ form.status.label }} *</label>
+                                {{ form.status }}
+                                {% if form.status.errors %}
+                                    <div class="text-danger mt-1">
+                                        {% for error in form.status.errors %}
+                                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">Current status of the test run.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.scheduled_date.id_for_label }}" class="form-label">{{ form.scheduled_date.label }}</label>
+                                {{ form.scheduled_date }}
+                                {% if form.scheduled_date.errors %}
+                                    <div class="text-danger mt-1">
+                                        {% for error in form.scheduled_date.errors %}
+                                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">Optional: When is this test run scheduled to be executed?</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Case Selection -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-tasks"></i> Test Case Selection
+                        <span class="badge bg-info ms-2" id="selected-count">0 selected</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <!-- Hierarchical Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="project-filter" class="form-label">Filter by Project</label>
+                            <select id="project-filter" class="form-control">
+                                <option value="">All Projects</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="epic-filter" class="form-label">Filter by Epic</label>
+                            <select id="epic-filter" class="form-control">
+                                <option value="">All Epics</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="story-filter" class="form-label">Filter by User Story</label>
+                            <select id="story-filter" class="form-control">
+                                <option value="">All User Stories</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Search and Quick Actions -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="testcase-search" class="form-label">Search Test Cases</label>
+                            <input type="text" id="testcase-search" class="form-control" placeholder="Search by name or description...">
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <button type="button" id="select-all-testcases" class="btn btn-outline-primary me-2">
+                                <i class="fas fa-check-square"></i> Select All
+                            </button>
+                            <button type="button" id="clear-all-testcases" class="btn btn-outline-secondary">
+                                <i class="fas fa-square"></i> Clear All
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Test Cases List -->
+                    <div id="testcases-container" class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
+                        <div id="loading-testcases" class="text-center py-3">
+                            <i class="fas fa-spinner fa-spin"></i> Loading test cases...
+                        </div>
+                        <div id="testcases-list" style="display: none;">
+                            <!-- Test cases will be loaded here dynamically -->
+                        </div>
+                        <div id="no-testcases" class="text-center py-3 text-muted" style="display: none;">
+                            <i class="fas fa-exclamation-circle"></i>
+                            No test cases found. Please adjust your filters or create test cases first.
+                        </div>
+                    </div>
+
+                    <!-- Selected Test Cases Summary -->
+                    <div id="selected-summary" class="mt-3" style="display: none;">
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-info-circle"></i> Selected Test Cases Summary</h6>
+                            <div id="summary-content"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <button type="submit" class="btn btn-primary me-2" id="save-btn">
+                                <i class="fas fa-save"></i> {{ action|default:"Save" }} Test Run
+                            </button>
+                            <button type="button" class="btn btn-success me-2" id="save-and-execute-btn" {% if not test_run %}style="display: none;"{% endif %}>
+                                <i class="fas fa-play"></i> Save & Execute
+                            </button>
+                        </div>
+                        <div>
+                            <a href="{% url 'test_cases:test_run_list' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Cancel
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Hidden input for selected test cases -->
+<input type="hidden" id="selected-testcases" name="selected_testcases" value="">
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const projectFilter = document.getElementById('project-filter');
+    const epicFilter = document.getElementById('epic-filter');
+    const storyFilter = document.getElementById('story-filter');
+    const testcaseSearch = document.getElementById('testcase-search');
+    const testcasesList = document.getElementById('testcases-list');
+    const loadingIndicator = document.getElementById('loading-testcases');
+    const noTestcasesMessage = document.getElementById('no-testcases');
+    const selectedCount = document.getElementById('selected-count');
+    const selectedSummary = document.getElementById('selected-summary');
+    const summaryContent = document.getElementById('summary-content');
+    const selectedTestcasesInput = document.getElementById('selected-testcases');
+    
+    let allTestcases = [];
+    let filteredTestcases = [];
+    let selectedTestcases = new Set();
+
+    // Load initial data
+    loadProjects();
+    loadTestcases();
+
+    // Event listeners
+    projectFilter.addEventListener('change', function() {
+        loadEpics(this.value);
+        loadTestcases();
+    });
+
+    epicFilter.addEventListener('change', function() {
+        loadStories(this.value);
+        loadTestcases();
+    });
+
+    storyFilter.addEventListener('change', function() {
+        loadTestcases();
+    });
+
+    testcaseSearch.addEventListener('input', function() {
+        filterTestcases();
+    });
+
+    document.getElementById('select-all-testcases').addEventListener('click', function() {
+        filteredTestcases.forEach(tc => selectedTestcases.add(tc.id));
+        updateTestcaseDisplay();
+        updateSelectedSummary();
+    });
+
+    document.getElementById('clear-all-testcases').addEventListener('click', function() {
+        selectedTestcases.clear();
+        updateTestcaseDisplay();
+        updateSelectedSummary();
+    });
+
+    document.getElementById('save-and-execute-btn').addEventListener('click', function() {
+        const form = document.getElementById('test-run-form');
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'save_and_execute';
+        input.value = 'true';
+        form.appendChild(input);
+        form.submit();
+    });
+
+    // Form submission handler
+    document.getElementById('test-run-form').addEventListener('submit', function() {
+        selectedTestcasesInput.value = JSON.stringify(Array.from(selectedTestcases));
+    });
+
+    // Load projects
+    function loadProjects() {
+        fetch('{% url "test_cases:project_list" %}?format=json')
+            .then(response => response.json())
+            .then(data => {
+                projectFilter.innerHTML = '<option value="">All Projects</option>';
+                data.forEach(project => {
+                    const option = document.createElement('option');
+                    option.value = project.id;
+                    option.textContent = project.name;
+                    projectFilter.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading projects:', error);
+            });
+    }
+
+    // Load epics based on selected project
+    function loadEpics(projectId) {
+        epicFilter.innerHTML = '<option value="">All Epics</option>';
+        storyFilter.innerHTML = '<option value="">All User Stories</option>';
+        
+        if (!projectId) return;
+
+        fetch(`{% url "test_cases:get_epics_by_project" %}?project_id=${projectId}`)
+            .then(response => response.json())
+            .then(data => {
+                data.forEach(epic => {
+                    const option = document.createElement('option');
+                    option.value = epic.id;
+                    option.textContent = epic.name;
+                    epicFilter.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading epics:', error);
+            });
+    }
+
+    // Load stories based on selected epic
+    function loadStories(epicId) {
+        storyFilter.innerHTML = '<option value="">All User Stories</option>';
+        
+        if (!epicId) return;
+
+        fetch(`{% url "test_cases:get_stories_by_epic" %}?epic_id=${epicId}`)
+            .then(response => response.json())
+            .then(data => {
+                data.forEach(story => {
+                    const option = document.createElement('option');
+                    option.value = story.id;
+                    option.textContent = story.name;
+                    storyFilter.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading stories:', error);
+            });
+    }
+
+    // Load test cases
+    function loadTestcases() {
+        loadingIndicator.style.display = 'block';
+        testcasesList.style.display = 'none';
+        noTestcasesMessage.style.display = 'none';
+
+        const params = new URLSearchParams();
+        if (projectFilter.value) params.append('project_id', projectFilter.value);
+        if (epicFilter.value) params.append('epic_id', epicFilter.value);
+        if (storyFilter.value) params.append('story_id', storyFilter.value);
+
+        fetch(`{% url "test_cases:get_test_cases_by_filters" %}?${params}`)
+            .then(response => response.json())
+            .then(data => {
+                allTestcases = data;
+                filterTestcases();
+                loadingIndicator.style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error loading test cases:', error);
+                loadingIndicator.style.display = 'none';
+                noTestcasesMessage.style.display = 'block';
+            });
+    }
+
+    // Filter test cases based on search
+    function filterTestcases() {
+        const searchTerm = testcaseSearch.value.toLowerCase();
+        filteredTestcases = allTestcases.filter(tc => 
+            tc.name.toLowerCase().includes(searchTerm) ||
+            (tc.description && tc.description.toLowerCase().includes(searchTerm))
+        );
+        updateTestcaseDisplay();
+    }
+
+    // Update test cases display
+    function updateTestcaseDisplay() {
+        if (filteredTestcases.length === 0) {
+            testcasesList.style.display = 'none';
+            noTestcasesMessage.style.display = 'block';
+            return;
+        }
+
+        noTestcasesMessage.style.display = 'none';
+        testcasesList.style.display = 'block';
+
+        testcasesList.innerHTML = '';
+        
+        filteredTestcases.forEach(tc => {
+            const div = document.createElement('div');
+            div.className = 'form-check mb-2 p-2 border rounded';
+            div.innerHTML = `
+                <input class="form-check-input" type="checkbox" id="tc-${tc.id}" value="${tc.id}" 
+                       ${selectedTestcases.has(tc.id) ? 'checked' : ''}>
+                <label class="form-check-label w-100" for="tc-${tc.id}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>${tc.name}</strong>
+                            <div class="text-muted small">${tc.user_story_name || ''}</div>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-${getPriorityColor(tc.priority)}">${tc.priority}</span>
+                            <span class="badge bg-${getStatusColor(tc.status)}">${tc.status}</span>
+                        </div>
+                    </div>
+                </label>
+            `;
+            
+            const checkbox = div.querySelector('input[type="checkbox"]');
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    selectedTestcases.add(parseInt(tc.id));
+                } else {
+                    selectedTestcases.delete(parseInt(tc.id));
+                }
+                updateSelectedSummary();
+            });
+            
+            testcasesList.appendChild(div);
+        });
+
+        updateSelectedSummary();
+    }
+
+    // Update selected summary
+    function updateSelectedSummary() {
+        const count = selectedTestcases.size;
+        selectedCount.textContent = `${count} selected`;
+
+        if (count === 0) {
+            selectedSummary.style.display = 'none';
+            return;
+        }
+
+        selectedSummary.style.display = 'block';
+        
+        const selectedTcs = allTestcases.filter(tc => selectedTestcases.has(tc.id));
+        const priorityCounts = {};
+        const statusCounts = {};
+        
+        selectedTcs.forEach(tc => {
+            priorityCounts[tc.priority] = (priorityCounts[tc.priority] || 0) + 1;
+            statusCounts[tc.status] = (statusCounts[tc.status] || 0) + 1;
+        });
+
+        let summaryHtml = `<strong>${count} test case(s) selected</strong><br>`;
+        summaryHtml += '<div class="row mt-2">';
+        summaryHtml += '<div class="col-md-6">';
+        summaryHtml += '<small><strong>Priority Distribution:</strong><br>';
+        Object.entries(priorityCounts).forEach(([priority, count]) => {
+            summaryHtml += `<span class="badge bg-${getPriorityColor(priority)} me-1">${priority}: ${count}</span>`;
+        });
+        summaryHtml += '</small></div>';
+        summaryHtml += '<div class="col-md-6">';
+        summaryHtml += '<small><strong>Status Distribution:</strong><br>';
+        Object.entries(statusCounts).forEach(([status, count]) => {
+            summaryHtml += `<span class="badge bg-${getStatusColor(status)} me-1">${status}: ${count}</span>`;
+        });
+        summaryHtml += '</small></div>';
+        summaryHtml += '</div>';
+
+        summaryContent.innerHTML = summaryHtml;
+    }
+
+    // Helper functions for badge colors
+    function getPriorityColor(priority) {
+        const colors = {
+            'low': 'secondary',
+            'medium': 'primary',
+            'high': 'warning',
+            'critical': 'danger'
+        };
+        return colors[priority] || 'secondary';
+    }
+
+    function getStatusColor(status) {
+        const colors = {
+            'draft': 'secondary',
+            'ready': 'success',
+            'blocked': 'danger'
+        };
+        return colors[status] || 'secondary';
+    }
+
+    // Form validation
+    document.getElementById('test-run-form').addEventListener('submit', function(e) {
+        const nameField = document.getElementById('{{ form.name.id_for_label }}');
+        
+        if (!nameField.value.trim()) {
+            e.preventDefault();
+            nameField.focus();
+            alert('Please enter a test run name.');
+            return false;
+        }
+
+        if (selectedTestcases.size === 0) {
+            e.preventDefault();
+            const confirmRun = confirm('No test cases are selected. Do you want to create an empty test run?');
+            if (!confirmRun) {
+                return false;
+            }
+        }
+
+        // Update hidden input with selected test cases
+        selectedTestcasesInput.value = JSON.stringify(Array.from(selectedTestcases));
+    });
+});
+</script>
+
+<style>
+.form-check:hover {
+    background-color: #f8f9fa;
+}
+
+.form-check-input:checked + .form-check-label {
+    background-color: #e3f2fd;
+}
+
+#testcases-container {
+    background-color: #fafafa;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+</style>
+{% endblock %}
