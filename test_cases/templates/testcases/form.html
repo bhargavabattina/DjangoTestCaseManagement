@@ -73,21 +73,41 @@
                     <div class="row">
                         <div class="col-md-4">
                             <div class="mb-3">
-                                <label for="project-select" class="form-label">Project *</label>
-                                <select id="project-select" class="form-control" {% if testcase %}disabled{% endif %}>
-                                    <option value="">Select Project...</option>
-                                    <!-- Options will be populated via JavaScript -->
-                                </select>
+                                <label for="{{ form.project.id_for_label }}" class="form-label">{{ form.project.label }} *</label>
+                                {{ form.project }}
+                                <div id="project-loading" class="d-none">
+                                    <small class="text-muted">
+                                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                        Loading projects...
+                                    </small>
+                                </div>
+                                {% if form.project.errors %}
+                                    <div class="text-danger mt-1">
+                                        {% for error in form.project.errors %}
+                                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
                                 <div class="form-text">Select the project for this test case.</div>
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="mb-3">
-                                <label for="epic-select" class="form-label">Epic *</label>
-                                <select id="epic-select" class="form-control" {% if testcase %}disabled{% endif %}>
-                                    <option value="">Select Epic...</option>
-                                    <!-- Options will be populated via JavaScript -->
-                                </select>
+                                <label for="{{ form.epic.id_for_label }}" class="form-label">{{ form.epic.label }} *</label>
+                                {{ form.epic }}
+                                <div id="epic-loading" class="d-none">
+                                    <small class="text-muted">
+                                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                        Loading epics...
+                                    </small>
+                                </div>
+                                {% if form.epic.errors %}
+                                    <div class="text-danger mt-1">
+                                        {% for error in form.epic.errors %}
+                                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
                                 <div class="form-text">Select the epic for this test case.</div>
                             </div>
                         </div>
@@ -95,6 +115,12 @@
                             <div class="mb-3">
                                 <label for="{{ form.user_story.id_for_label }}" class="form-label">{{ form.user_story.label }} *</label>
                                 {{ form.user_story }}
+                                <div id="user-story-loading" class="d-none">
+                                    <small class="text-muted">
+                                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                        Loading user stories...
+                                    </small>
+                                </div>
                                 {% if form.user_story.errors %}
                                     <div class="text-danger mt-1">
                                         {% for error in form.user_story.errors %}
@@ -467,94 +493,201 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Hierarchical dropdown functionality
-    const projectSelect = document.getElementById('project-select');
-    const epicSelect = document.getElementById('epic-select');
+    const projectSelect = document.getElementById('{{ form.project.id_for_label }}');
+    const epicSelect = document.getElementById('{{ form.epic.id_for_label }}');
     const userStorySelect = document.getElementById('{{ form.user_story.id_for_label }}');
-
-    // Populate project dropdown (if not editing)
-    {% if not testcase %}
-    function populateProjects() {
-        // In a real implementation, you'd fetch this data via AJAX
-        // For now, we'll populate from the existing user story options
-        const projects = new Map();
-        Array.from(userStorySelect.options).forEach(option => {
-            if (option.value) {
-                const parts = option.textContent.split(' - ');
-                if (parts.length >= 3) {
-                    const projectName = parts[0];
-                    projects.set(projectName, projectName);
-                }
+    const projectLoadingDiv = document.getElementById('project-loading');
+    const epicLoadingDiv = document.getElementById('epic-loading');
+    const userStoryLoadingDiv = document.getElementById('user-story-loading');
+    
+    // Function to show/hide loading state
+    function toggleLoading(element, show) {
+        if (element) {
+            if (show) {
+                element.classList.remove('d-none');
+            } else {
+                element.classList.add('d-none');
             }
-        });
-        
-        projects.forEach((value, key) => {
+        }
+    }
+    
+    // Function to clear dropdown options
+    function clearOptions(select, placeholder) {
+        select.innerHTML = `<option value="">${placeholder}</option>`;
+    }
+    
+    // Function to populate dropdown options
+    function populateOptions(select, data, placeholder) {
+        clearOptions(select, placeholder);
+        data.forEach(function(item) {
             const option = document.createElement('option');
-            option.value = key;
-            option.textContent = key;
-            projectSelect.appendChild(option);
+            option.value = item.id;
+            option.textContent = item.name;
+            select.appendChild(option);
         });
+        // If no items are returned, add a disabled option
+        if (data.length === 0) {
+            const noItemsOption = document.createElement('option');
+            noItemsOption.value = '';
+            noItemsOption.textContent = `No ${placeholder.toLowerCase().replace('select ', '')} available`;
+            noItemsOption.disabled = true;
+            select.appendChild(noItemsOption);
+        }
     }
     
-    function populateEpics(projectName) {
-        epicSelect.innerHTML = '<option value="">Select Epic...</option>';
-        userStorySelect.innerHTML = '<option value="">Select User Story...</option>';
+    // Function to show error message
+    function showError(parentElement, message) {
+        // Remove existing error messages
+        const existingError = parentElement.querySelector('.ajax-error');
+        if (existingError) {
+            existingError.remove();
+        }
         
-        if (!projectName) return;
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'alert alert-warning alert-dismissible fade show mt-2 ajax-error';
+        errorDiv.innerHTML = `
+            <i class="fas fa-exclamation-triangle"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        parentElement.appendChild(errorDiv);
         
-        const epics = new Map();
-        Array.from(userStorySelect.options).forEach(option => {
-            if (option.value) {
-                const parts = option.textContent.split(' - ');
-                if (parts.length >= 3 && parts[0] === projectName) {
-                    const epicName = parts[1];
-                    epics.set(epicName, epicName);
-                }
+        // Auto-remove error after 5 seconds
+        setTimeout(() => {
+            if (errorDiv.parentNode) {
+                errorDiv.remove();
             }
-        });
-        
-        epics.forEach((value, key) => {
-            const option = document.createElement('option');
-            option.value = key;
-            option.textContent = key;
-            epicSelect.appendChild(option);
-        });
+        }, 5000);
     }
     
-    function populateUserStories(projectName, epicName) {
-        userStorySelect.innerHTML = '<option value="">Select User Story...</option>';
+    // Function to handle project selection change
+    function handleProjectChange() {
+        const projectId = projectSelect.value;
         
-        if (!projectName || !epicName) return;
+        // Clear dependent dropdowns
+        clearOptions(epicSelect, 'Select Epic...');
+        clearOptions(userStorySelect, 'Select User Story...');
         
-        // Store original options for restoration
-        const originalOptions = Array.from(userStorySelect.querySelectorAll('option[value]'));
+        if (!projectId) {
+            return;
+        }
         
-        originalOptions.forEach(option => {
-            const parts = option.textContent.split(' - ');
-            if (parts.length >= 3 && parts[0] === projectName && parts[1] === epicName) {
-                userStorySelect.appendChild(option);
+        // Show loading state
+        toggleLoading(epicLoadingDiv, true);
+        epicSelect.disabled = true;
+        
+        // Make AJAX request to get epics for selected project
+        fetch(`{% url 'test_cases:get_epics_by_project' %}?project_id=${projectId}`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
             }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            populateOptions(epicSelect, data, 'Select Epic...');
+            toggleLoading(epicLoadingDiv, false);
+            epicSelect.disabled = false;
+            // If editing and initial epic is set, trigger epic change
+            {% if testcase %}
+            const initialEpicId = "{{ testcase.user_story.epic.pk }}";
+            if (epicSelect.querySelector(`option[value="${initialEpicId}"]`)) {
+                epicSelect.value = initialEpicId;
+                handleEpicChange();
+            }
+            {% endif %}
+        })
+        .catch(error => {
+            console.error('Error fetching epics:', error);
+            toggleLoading(epicLoadingDiv, false);
+            epicSelect.disabled = false;
+            showError(epicSelect.parentNode, 'Failed to load epics. Please try again or refresh the page.');
         });
     }
     
-    // Event listeners for hierarchical selection
-    projectSelect.addEventListener('change', function() {
-        populateEpics(this.value);
-    });
+    // Function to handle epic selection change
+    function handleEpicChange() {
+        const epicId = epicSelect.value;
+        
+        // Clear dependent dropdown
+        clearOptions(userStorySelect, 'Select User Story...');
+        
+        if (!epicId) {
+            return;
+        }
+        
+        // Show loading state
+        toggleLoading(userStoryLoadingDiv, true);
+        userStorySelect.disabled = true;
+        
+        // Make AJAX request to get user stories for selected epic
+        fetch(`{% url 'test_cases:get_stories_by_epic' %}?epic_id=${epicId}`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            populateOptions(userStorySelect, data, 'Select User Story...');
+            toggleLoading(userStoryLoadingDiv, false);
+            userStorySelect.disabled = false;
+            // If editing and initial user story is set, select it
+            {% if testcase %}
+            const initialUserStoryId = "{{ testcase.user_story.pk }}";
+            if (userStorySelect.querySelector(`option[value="${initialUserStoryId}"]`)) {
+                userStorySelect.value = initialUserStoryId;
+            }
+            {% endif %}
+        })
+        .catch(error => {
+            console.error('Error fetching user stories:', error);
+            toggleLoading(userStoryLoadingDiv, false);
+            userStorySelect.disabled = false;
+            showError(userStorySelect.parentNode, 'Failed to load user stories. Please try again or refresh the page.');
+        });
+    }
     
-    epicSelect.addEventListener('change', function() {
-        const projectName = projectSelect.value;
-        populateUserStories(projectName, this.value);
-    });
+    // Attach event listeners
+    if (projectSelect) {
+        projectSelect.addEventListener('change', handleProjectChange);
+    }
     
-    // Initialize project dropdown
-    populateProjects();
+    if (epicSelect) {
+        epicSelect.addEventListener('change', handleEpicChange);
+    }
     
-    // Pre-select values if editing
+    // Initialize cascading dropdowns on page load for edit scenario or new test case
     {% if testcase %}
-    projectSelect.value = '{{ testcase.user_story.epic.project.name|escapejs }}';
-    epicSelect.innerHTML = '<option value="{{ testcase.user_story.epic.name|escapejs }}">{{ testcase.user_story.epic.name|escapejs }}</option>';
-    epicSelect.value = '{{ testcase.user_story.epic.name|escapejs }}';
-    {% endif %}
+    // For edit scenario, pre-populate the dropdowns based on existing data
+    // Set the initial project value and trigger the chain reaction
+    if (projectSelect && "{{ testcase.user_story.epic.project.pk }}") {
+        projectSelect.value = "{{ testcase.user_story.epic.project.pk }}";
+        handleProjectChange(); // This will load epics
+    }
+    {% else %}
+    // For a new test case, if there are pre-selected values from Django form (e.g. from initial data),
+    // trigger the change events to populate lower level dropdowns.
+    // However, for project/epic, they are empty initially unless overridden,
+    // so we need to populate initial projects here.
+    // For this context, we assume all projects are available in the initial `form.project` options.
+    // No explicit AJAX call for initial projects is needed as Django renders them.
+    // Just enable the dropdowns if not disabled by default or form logic.
+    projectSelect.disabled = false;
+    epicSelect.disabled = true; // Start disabled
+    userStorySelect.disabled = true; // Start disabled
     {% endif %}
 
     // Form validation and submission
@@ -567,6 +700,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Validate required fields
         const requiredFields = [
+            { field: projectSelect, name: 'Project' },
+            { field: epicSelect, name: 'Epic' },
             { field: userStorySelect, name: 'User Story' },
             { field: document.getElementById('{{ form.name.id_for_label }}'), name: 'Test Case Name' },
             { field: testStepsField, name: 'Test Steps' },
@@ -577,7 +712,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let isValid = true;
         
         requiredFields.forEach(({field, name}) => {
-            if (!field.value.trim()) {
+            if (!field.value.trim() && field.required) { // Check field.required as well
                 field.classList.add('is-invalid');
                 if (!firstInvalidField) {
                     firstInvalidField = field;

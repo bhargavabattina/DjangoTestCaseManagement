@@ -3,7 +3,6 @@ from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from .models import Project, Epic, UserStory, TestCase, TestRun, TestExecution, TestExecutionStep, TestSuite
-from django.utils import timezone
 
 
 class ProjectForm(forms.ModelForm):
@@ -48,9 +47,15 @@ class EpicForm(forms.ModelForm):
 
 
 class UserStoryForm(forms.ModelForm):
+    project = forms.ModelChoiceField(
+        queryset=Project.objects.none(),
+        widget=forms.Select(attrs={'class': 'form-control', 'id': 'id_project'}),
+        help_text="Select the project first"
+    )
+    
     class Meta:
         model = UserStory
-        fields = ['name', 'description', 'acceptance_criteria', 'status', 'priority', 'story_points', 'epic', 'assigned_to']
+        fields = ['name', 'description', 'acceptance_criteria', 'status', 'priority', 'story_points', 'project', 'epic', 'assigned_to']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'required': True}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
@@ -66,10 +71,15 @@ class UserStoryForm(forms.ModelForm):
         user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
         if user:
-            user_projects = Project.objects.filter(created_by=user)
-            self.fields['epic'].queryset = Epic.objects.filter(project__in=user_projects)
+            self.fields['project'].queryset = Project.objects.filter(created_by=user)
+            self.fields['epic'].queryset = Epic.objects.none()  # Empty initially for cascading
             self.fields['assigned_to'].queryset = User.objects.all()
             self.fields['assigned_to'].empty_label = "Unassigned"
+            
+            # If editing existing instance, populate epic based on current project
+            if self.instance and self.instance.pk and self.instance.epic:
+                self.fields['project'].initial = self.instance.epic.project
+                self.fields['epic'].queryset = Epic.objects.filter(project=self.instance.epic.project)
     
     def clean_name(self):
         name = self.cleaned_data.get('name')
@@ -82,12 +92,34 @@ class UserStoryForm(forms.ModelForm):
         if story_points is not None and (story_points < 1 or story_points > 100):
             raise ValidationError("Story points must be between 1 and 100.")
         return story_points
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        project = cleaned_data.get('project')
+        epic = cleaned_data.get('epic')
+        
+        if project and epic and epic.project != project:
+            raise ValidationError("Selected epic does not belong to the selected project.")
+        
+        return cleaned_data
 
 
 class TestCaseForm(forms.ModelForm):
+    project = forms.ModelChoiceField(
+        queryset=Project.objects.none(),
+        widget=forms.Select(attrs={'class': 'form-control', 'id': 'id_project'}),
+        help_text="Select the project first"
+    )
+    
+    epic = forms.ModelChoiceField(
+        queryset=Epic.objects.none(),
+        widget=forms.Select(attrs={'class': 'form-control', 'id': 'id_epic'}),
+        help_text="Select the epic after choosing project"
+    )
+    
     class Meta:
         model = TestCase
-        fields = ['name', 'description', 'test_steps', 'expected_results', 'status', 'execution_status', 'priority', 'is_automated', 'user_story', 'assigned_to']
+        fields = ['name', 'description', 'test_steps', 'expected_results', 'status', 'execution_status', 'priority', 'is_automated', 'project', 'epic', 'user_story', 'assigned_to']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'required': True}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
@@ -105,11 +137,18 @@ class TestCaseForm(forms.ModelForm):
         user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
         if user:
-            user_projects = Project.objects.filter(created_by=user)
-            user_epics = Epic.objects.filter(project__in=user_projects)
-            self.fields['user_story'].queryset = UserStory.objects.filter(epic__in=user_epics)
+            self.fields['project'].queryset = Project.objects.filter(created_by=user)
+            self.fields['epic'].queryset = Epic.objects.none()  # Empty initially for cascading
+            self.fields['user_story'].queryset = UserStory.objects.none()  # Empty initially for cascading
             self.fields['assigned_to'].queryset = User.objects.all()
             self.fields['assigned_to'].empty_label = "Unassigned"
+            
+            # If editing existing instance, populate fields based on current user story
+            if self.instance and self.instance.pk and self.instance.user_story:
+                self.fields['project'].initial = self.instance.user_story.epic.project
+                self.fields['epic'].initial = self.instance.user_story.epic
+                self.fields['epic'].queryset = Epic.objects.filter(project=self.instance.user_story.epic.project)
+                self.fields['user_story'].queryset = UserStory.objects.filter(epic=self.instance.user_story.epic)
     
     def clean_name(self):
         name = self.cleaned_data.get('name')
@@ -128,6 +167,20 @@ class TestCaseForm(forms.ModelForm):
         if len(expected_results.strip()) < 10:
             raise ValidationError("Expected results must be at least 10 characters long.")
         return expected_results
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        project = cleaned_data.get('project')
+        epic = cleaned_data.get('epic')
+        user_story = cleaned_data.get('user_story')
+        
+        if project and epic and epic.project != project:
+            raise ValidationError("Selected epic does not belong to the selected project.")
+        
+        if epic and user_story and user_story.epic != epic:
+            raise ValidationError("Selected user story does not belong to the selected epic.")
+        
+        return cleaned_data
 
 
 class ExcelUploadForm(forms.Form):

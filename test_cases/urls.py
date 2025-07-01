@@ -64,8 +64,16 @@ urlpatterns = [
     path('bulk/test-execution/', views.bulk_test_execution, name='bulk_test_execution'),
     
     # AJAX URLs for dynamic dropdowns
+    path('ajax/projects-by-user/', views.get_projects_by_user, name='get_projects_by_user'),
     path('ajax/epics-by-project/', views.get_epics_by_project, name='get_epics_by_project'),
     path('ajax/stories-by-epic/', views.get_stories_by_epic, name='get_stories_by_epic'),
     path('ajax/testcases-by-filters/', views.get_test_cases_by_filters, name='get_test_cases_by_filters'),
     path('ajax/execution-stats/', views.get_execution_stats, name='get_execution_stats'),
+    
+    # Additional AJAX URLs for test execution
+    path('ajax/test-execution/<int:pk>/detail/', views.test_execution_detail_ajax, name='test_execution_detail_ajax'),
+    path('ajax/test-execution/summary/', views.test_execution_summary_data, name='test_execution_summary_data'),
+    path('ajax/test-execution/project-breakdown/', views.test_execution_project_breakdown, name='test_execution_project_breakdown'),
+    path('ajax/test-suite/stats/', views.test_suite_stats, name='test_suite_stats'),
+    path('ajax/test-run/create-from-suite/', views.test_run_create_from_suite, name='test_run_create_from_suite'),
 ]

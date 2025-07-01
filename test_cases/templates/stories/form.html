@@ -61,10 +61,32 @@
         <form method="post" novalidate>
             {% csrf_token %}
             
+            <!-- Project Selection -->
+            <div class="mb-3">
+                <label for="{{ form.project.id_for_label }}" class="form-label">{{ form.project.label }} *</label>
+                {{ form.project }}
+                {% if form.project.errors %}
+                    <div class="text-danger mt-1">
+                        {% for error in form.project.errors %}
+                            <small><i class="fas fa-exclamation-circle"></i> {{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if form.project.help_text %}
+                    <div class="form-text">{{ form.project.help_text }}</div>
+                {% endif %}
+            </div>
+
             <!-- Epic Selection -->
             <div class="mb-3">
                 <label for="{{ form.epic.id_for_label }}" class="form-label">{{ form.epic.label }} *</label>
                 {{ form.epic }}
+                <div id="epic-loading" class="d-none">
+                    <small class="text-muted">
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        Loading epics...
+                    </small>
+                </div>
                 {% if form.epic.errors %}
                     <div class="text-danger mt-1">
                         {% for error in form.epic.errors %}
@@ -303,22 +325,117 @@
 
 {% block extra_js %}
 <script>
-    // Dynamic epic filtering based on project selection
     document.addEventListener('DOMContentLoaded', function() {
+        const projectSelect = document.getElementById('{{ form.project.id_for_label }}');
         const epicSelect = document.getElementById('{{ form.epic.id_for_label }}');
+        const epicLoadingDiv = document.getElementById('epic-loading');
         
-        // Store original epic options
-        const originalOptions = Array.from(epicSelect.options);
+        // Store original epic options for fallback
+        const originalEpicOptions = Array.from(epicSelect.options);
         
-        // Function to filter epics based on project
-        function filterEpics() {
-            // This would require AJAX to get epics for selected project
-            // For now, we'll just show all epics
-            // In a real implementation, you'd make an AJAX call to get filtered epics
+        // Function to show/hide loading state
+        function toggleEpicLoading(show) {
+            if (epicLoadingDiv) {
+                if (show) {
+                    epicLoadingDiv.classList.remove('d-none');
+                    epicSelect.disabled = true;
+                } else {
+                    epicLoadingDiv.classList.add('d-none');
+                    epicSelect.disabled = false;
+                }
+            }
+        }
+        
+        // Function to clear epic dropdown
+        function clearEpicOptions() {
+            epicSelect.innerHTML = '<option value="">Select an epic...</option>';
+        }
+        
+        // Function to populate epic dropdown
+        function populateEpicOptions(epics) {
+            clearEpicOptions();
+            epics.forEach(function(epic) {
+                const option = document.createElement('option');
+                option.value = epic.id;
+                option.textContent = epic.name;
+                // Pre-select if it's the current story's epic
+                {% if story %}
+                    if (epic.id == {{ story.epic.id }}) {
+                        option.selected = true;
+                    }
+                {% endif %}
+                epicSelect.appendChild(option);
+            });
+            // If no epics are returned, add a disabled option
+            if (epics.length === 0) {
+                const noEpicsOption = document.createElement('option');
+                noEpicsOption.value = '';
+                noEpicsOption.textContent = 'No epics available for this project';
+                noEpicsOption.disabled = true;
+                epicSelect.appendChild(noEpicsOption);
+            }
+        }
+        
+        // Function to handle project selection change
+        function handleProjectChange() {
+            const projectId = projectSelect.value;
+            
+            if (!projectId) {
+                clearEpicOptions();
+                return;
+            }
+            
+            // Show loading state
+            toggleEpicLoading(true);
+            
+            // Make AJAX request to get epics for selected project
+            fetch(`{% url 'test_cases:get_epics_by_project' %}?project_id=${projectId}`, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                populateEpicOptions(data);
+                toggleEpicLoading(false);
+            })
+            .catch(error => {
+                console.error('Error fetching epics:', error);
+                toggleEpicLoading(false);
+                
+                // Show error message to user
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'alert alert-warning alert-dismissible fade show mt-2';
+                errorDiv.innerHTML = `
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Failed to load epics. Please try again or refresh the page.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                `;
+                epicSelect.parentNode.appendChild(errorDiv);
+                
+                // Auto-remove error after 5 seconds
+                setTimeout(() => {
+                    if (errorDiv.parentNode) {
+                        errorDiv.remove();
+                    }
+                }, 5000);
+            });
+        }
+        
+        // Attach event listener to project dropdown
+        if (projectSelect) {
+            projectSelect.addEventListener('change', handleProjectChange);
         }
         
         // Auto-focus on the first form field
-        const firstInput = document.querySelector('form select, form input:not([type="hidden"]), form textarea');
+        const firstInput = document.querySelector('form select:not([disabled]), form input:not([type="hidden"]), form textarea');
         if (firstInput) {
             firstInput.focus();
         }
@@ -349,13 +466,13 @@
                 textArea.parentNode.appendChild(charCountDiv);
                 
                 function updateCharCount() {
-                    const remaining = maxLength - textArea.value.length;
-                    charCountDiv.textContent = `${textArea.value.length}/${maxLength} characters`;
-                    charCountDiv.className = remaining < 50 ? 'form-text text-end text-warning' : 'form-text text-end text-muted';
+                    const currentLength = textArea.value.length;
+                    charCountDiv.textContent = `${currentLength}/${maxLength} characters`;
+                    charCountDiv.className = currentLength > maxLength ? 'form-text text-end text-danger' : (currentLength >= maxLength * 0.8 ? 'form-text text-end text-warning' : 'form-text text-end text-muted');
                 }
                 
                 textArea.addEventListener('input', updateCharCount);
-                updateCharCount();
+                updateCharCount(); // Initial count
             }
         });
         
@@ -373,7 +490,6 @@
         }
         
         // Enhanced validation feedback
-        const form = document.querySelector('form');
         form.addEventListener('submit', function(e) {
             const requiredFields = form.querySelectorAll('[required]');
             let firstInvalidField = null;
@@ -395,6 +511,11 @@
                 firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         });
+        
+        // Initialize epic dropdown on page load if project is already selected
+        if (projectSelect && projectSelect.value) {
+            handleProjectChange();
+        }
     });
 </script>
 {% endblock %}

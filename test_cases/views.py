@@ -553,17 +553,39 @@ def testcase_import(request):
 @login_required
 def get_epics_by_project(request):
     project_id = request.GET.get('project_id')
-    epics = Epic.objects.filter(project_id=project_id, project__created_by=request.user)
-    data = [{'id': epic.id, 'name': epic.name} for epic in epics]
-    return JsonResponse(data, safe=False)
+    if not project_id:
+        return JsonResponse({'error': 'Project ID is required'}, status=400)
+    
+    try:
+        epics = Epic.objects.filter(project_id=project_id, project__created_by=request.user)
+        data = [{'id': epic.id, 'name': epic.name} for epic in epics]
+        return JsonResponse(data, safe=False)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @login_required
 def get_stories_by_epic(request):
     epic_id = request.GET.get('epic_id')
-    stories = UserStory.objects.filter(epic_id=epic_id, epic__project__created_by=request.user)
-    data = [{'id': story.id, 'name': story.name} for story in stories]
-    return JsonResponse(data, safe=False)
+    if not epic_id:
+        return JsonResponse({'error': 'Epic ID is required'}, status=400)
+    
+    try:
+        stories = UserStory.objects.filter(epic_id=epic_id, epic__project__created_by=request.user)
+        data = [{'id': story.id, 'name': story.name} for story in stories]
+        return JsonResponse(data, safe=False)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def get_projects_by_user(request):
+    try:
+        projects = Project.objects.filter(created_by=request.user)
+        data = [{'id': project.id, 'name': project.name} for project in projects]
+        return JsonResponse(data, safe=False)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 # Test Run Views
