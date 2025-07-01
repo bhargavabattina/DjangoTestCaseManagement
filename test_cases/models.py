@@ -139,6 +139,25 @@ class TestSuite(models.Model):
     def __str__(self):
         return self.name
 
+    def get_test_case_statistics(self):
+        """Get statistics about test cases in this suite"""
+        test_cases = self.test_cases.all()
+        
+        stats = {
+            'total': test_cases.count(),
+            'critical': test_cases.filter(priority='critical').count(),
+            'high': test_cases.filter(priority='high').count(),
+            'medium': test_cases.filter(priority='medium').count(),
+            'low': test_cases.filter(priority='low').count(),
+            'automated': test_cases.filter(is_automated=True).count(),
+            'manual': test_cases.filter(is_automated=False).count(),
+            'ready': test_cases.filter(status='ready').count(),
+            'draft': test_cases.filter(status='draft').count(),
+            'blocked': test_cases.filter(status='blocked').count(),
+        }
+        
+        return stats
+
 
 class TestRun(models.Model):
     STATUS_CHOICES = [

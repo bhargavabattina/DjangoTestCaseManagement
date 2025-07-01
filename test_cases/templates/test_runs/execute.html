@@ -348,6 +348,13 @@
                             <li><kbd>T</kbd> - Start/Stop Timer</li>
                         </ul>
                     </div>
+                    <div class="col-6">
+                        <h6>System</h6>
+                        <ul class="list-unstyled">
+                            <li><kbd>?</kbd> - Show this help</li>
+                            <li><kbd>Esc</kbd> - Toggle shortcuts</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
@@ -475,11 +482,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const timer = {
             startTime: Date.now(),
             elapsed: 0,
-            interval: null
+            interval: null,
+            pausedAt: null,
+            totalPausedTime: 0
         };
         
         timer.interval = setInterval(() => {
-            timer.elapsed = Math.floor((Date.now() - timer.startTime) / 1000);
+            const actualElapsed = Date.now() - timer.startTime - timer.totalPausedTime;
+            timer.elapsed = Math.floor(actualElapsed / 1000);
             const panel = document.querySelector(`[data-execution-id="${executionId}"]`);
             const displays = panel.querySelectorAll('.timer-display');
             displays.forEach(display => {
@@ -493,7 +503,9 @@ document.addEventListener('DOMContentLoaded', function() {
     function stopExecutionTimer(executionId) {
         if (executionTimers.has(executionId)) {
             clearInterval(executionTimers.get(executionId).interval);
-            return executionTimers.get(executionId).elapsed;
+            const elapsed = executionTimers.get(executionId).elapsed;
+            executionTimers.delete(executionId); // Remove the timer from the map
+            return elapsed;
         }
         return 0;
     }
@@ -522,15 +534,28 @@ document.addEventListener('DOMContentLoaded', function() {
             panel.querySelector('.execution-timer').style.display = 'inline-block';
             
             // Set status to in progress
-            statusSelect.value = 'in_progress';
-            updateExecutionStatus(panel, 'in_progress');
+            if (statusSelect.value === 'not_executed') { // Only change to in_progress if not already in a final state
+                statusSelect.value = 'in_progress';
+                updateExecutionStatus(panel, 'in_progress');
+            }
         });
         
         pauseBtn.addEventListener('click', function() {
             if (executionTimers.has(executionId)) {
-                clearInterval(executionTimers.get(executionId).interval);
-                this.disabled = true;
-                startBtn.disabled = false;
+                const timer = executionTimers.get(executionId);
+                if (timer.pausedAt) {
+                    // Resume
+                    resumeExecutionTimer(executionId);
+                    this.innerHTML = '<i class="fas fa-pause"></i> Pause';
+                    this.disabled = false;
+                    startBtn.disabled = true;
+                } else {
+                    // Pause
+                    pauseExecutionTimer(executionId);
+                    this.innerHTML = '<i class="fas fa-play"></i> Resume';
+                    this.disabled = false;
+                    startBtn.disabled = true;
+                }
             }
         });
         
@@ -543,12 +568,22 @@ document.addEventListener('DOMContentLoaded', function() {
             // Hide timer in header
             panel.querySelector('.execution-timer').style.display = 'none';
             
-            return elapsedSeconds;
+            // Update the display to the final elapsed time (not necessarily 0)
+            const displays = panel.querySelectorAll('.timer-display');
+            displays.forEach(display => {
+                display.textContent = formatTime(elapsedSeconds);
+            });
+            
+            // Don't return elapsedSeconds here, it's used when calling stopExecutionTimer directly
         });
         
         // Status change handler
         statusSelect.addEventListener('change', function() {
             updateExecutionStatus(panel, this.value);
+            // If status changes to a completed state, stop timer
+            if (['passed', 'failed', 'skipped', 'blocked'].includes(this.value)) {
+                stopExecutionTimer(executionId);
+            }
         });
         
         // Save execution
@@ -560,6 +595,7 @@ document.addEventListener('DOMContentLoaded', function() {
         quickPassBtn.addEventListener('click', function() {
             statusSelect.value = 'passed';
             updateExecutionStatus(panel, 'passed');
+            stopExecutionTimer(executionId); // Stop timer on quick actions
             saveExecutionResult(executionId, panel);
             setTimeout(() => navigateToTestCase(currentTestCaseIndex + 1), 500);
         });
@@ -567,6 +603,7 @@ document.addEventListener('DOMContentLoaded', function() {
         quickFailBtn.addEventListener('click', function() {
             statusSelect.value = 'failed';
             updateExecutionStatus(panel, 'failed');
+            stopExecutionTimer(executionId); // Stop timer on quick actions
             saveExecutionResult(executionId, panel);
         });
     });
@@ -600,78 +637,7 @@ document.addEventListener('DOMContentLoaded', function() {
         statusBadge.classList.add(statusClasses[status]);
         statusBadge.textContent = statusLabels[status];
         
-        updateProgressBar();
-    }
-    
-    function saveExecutionResult(executionId, panel) {
-        const statusSelect = panel.querySelector('.execution-status-select');
-        const commentsTextarea = panel.querySelector('.execution-comments');
-        const actualResultsTextarea = panel.querySelector('.actual-results');
-        const executionTime = executionTimers.has(executionId) ? 
-            Math.floor(executionTimers.get(executionId).elapsed / 60) : null;
-        
-        const formData = new FormData();
-        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
-        formData.append('status', statusSelect.value);
-        formData.append('comments', actualResultsTextarea.value);
-        formData.append('notes', commentsTextarea.value);
-        if (executionTime) {
-            formData.append('execution_time_minutes', executionTime);
-        }
-        
-        fetch(`{% url 'test_cases:test_execution_record' 0 %}`.replace('0', executionId), {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Show success message
-                const alert = document.createElement('div');
-                alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
-                alert.style.top = '20px';
-                alert.style.right = '20px';
-                alert.style.zIndex = '9999';
-                alert.innerHTML = `
-                    <i class="fas fa-check-circle"></i> Execution result saved successfully!
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                `;
-                document.body.appendChild(alert);
-                
-                setTimeout(() => {
-                    alert.remove();
-                }, 3000);
-            } else {
-                alert('Error saving execution result: ' + JSON.stringify(data.errors));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error saving execution result');
-        });
-    }
-    
-    function updateProgressBar() {
-        // Update progress bar and statistics
-        fetch(`{% url 'test_cases:get_execution_stats' %}?test_run_id={{ test_run.id }}`)
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('progress-badge').textContent = 
-                    `${data.passed + data.failed + data.skipped + data.blocked}/${data.total}`;
-                document.getElementById('pass-rate').textContent = `${data.pass_rate.toFixed(1)}%`;
-                
-                // Update progress bar
-                const total = data.total;
-                if (total > 0) {
-                    document.getElementById('passed-progress').style.width = `${(data.passed / total) * 100}%`;
-                    document.getElementById('failed-progress').style.width = `${(data.failed / total) * 100}%`;
-                    document.getElementById('skipped-progress').style.width = `${(data.skipped / total) * 100}%`;
-                    document.getElementById('blocked-progress').style.width = `${(data.blocked / total) * 100}%`;
-                }
-            })
-            .catch(error => {
-                console.error('Error updating progress:', error);
-            });
+        updateProgressBar(); // This now calls the enhanced updateDetailedProgress
     }
     
     // Save progress
@@ -685,4 +651,513 @@ document.addEventListener('DOMContentLoaded', function() {
             <i class="fas fa-save"></i> Progress saved successfully!
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         `;
-        document.
+        document.body.appendChild(alert);
+        
+        setTimeout(() => {
+            alert.remove();
+        }, 3000);
+        saveExecutionState();
+    });
+    
+    // Keyboard shortcuts support
+    let keyboardShortcutsEnabled = true;
+    
+    document.addEventListener('keydown', function(e) {
+        if (!keyboardShortcutsEnabled && e.key !== 'Escape' && e.key !== '?') return; // Allow toggling/help when disabled
+        
+        // Ignore if user is typing in an input field
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+            return;
+        }
+        
+        // Get current test case panel
+        const currentPanel = testCasePanels[currentTestCaseIndex];
+        
+        switch(e.key.toLowerCase()) {
+            case 'n':
+                if (keyboardShortcutsEnabled) {
+                    e.preventDefault();
+                    navigateToTestCase(currentTestCaseIndex + 1);
+                }
+                break;
+            case 'p':
+                if (keyboardShortcutsEnabled) {
+                    e.preventDefault();
+                    navigateToTestCase(currentTestCaseIndex - 1);
+                }
+                break;
+            case 'e':
+                if (keyboardShortcutsEnabled) {
+                    e.preventDefault();
+                    expandAllBtn.click();
+                }
+                break;
+            case 'c':
+                if (keyboardShortcutsEnabled) {
+                    e.preventDefault();
+                    collapseAllBtn.click();
+                }
+                break;
+            case '1':
+                if (keyboardShortcutsEnabled) {
+                    e.preventDefault();
+                    if (currentPanel) {
+                        const quickPassBtn = currentPanel.querySelector('.quick-pass');
+                        if (quickPassBtn) quickPassBtn.click();
+                    }
+                }
+                break;
+            case '2':
+                if (keyboardShortcutsEnabled) {
+                    e.preventDefault();
+                    if (currentPanel) {
+                        const quickFailBtn = currentPanel.querySelector('.quick-fail');
+                        if (quickFailBtn) quickFailBtn.click();
+                    }
+                }
+                break;
+            case '3':
+                if (keyboardShortcutsEnabled) {
+                    e.preventDefault();
+                    if (currentPanel) {
+                        const statusSelect = currentPanel.querySelector('.execution-status-select');
+                        if (statusSelect) {
+                            statusSelect.value = 'skipped';
+                            updateExecutionStatus(currentPanel, 'skipped');
+                            stopExecutionTimer(currentPanel.getAttribute('data-execution-id')); // Stop timer
+                            saveExecutionResult(currentPanel.getAttribute('data-execution-id'), currentPanel);
+                        }
+                    }
+                }
+                break;
+            case 's':
+                if (keyboardShortcutsEnabled) {
+                    e.preventDefault();
+                    if (currentPanel) {
+                        const saveBtn = currentPanel.querySelector('.save-execution');
+                        if (saveBtn) saveBtn.click();
+                    }
+                }
+                break;
+            case 't':
+                if (keyboardShortcutsEnabled) {
+                    e.preventDefault();
+                    if (currentPanel) {
+                        const startBtn = currentPanel.querySelector('.start-timer');
+                        const pauseBtn = currentPanel.querySelector('.pause-timer');
+                        const stopBtn = currentPanel.querySelector('.stop-timer');
+                        if (startBtn && !startBtn.disabled) {
+                            startBtn.click();
+                        } else if (pauseBtn && !pauseBtn.disabled && pauseBtn.innerHTML.includes('Pause')) { // If currently running
+                            pauseBtn.click(); // Pause
+                        } else if (pauseBtn && !pauseBtn.disabled && pauseBtn.innerHTML.includes('Resume')) { // If paused
+                            pauseBtn.click(); // Resume
+                        } else if (stopBtn && !stopBtn.disabled) {
+                            stopBtn.click();
+                        }
+                    }
+                }
+                break;
+            case '?':
+                e.preventDefault();
+                showKeyboardShortcuts();
+                break;
+            case 'escape':
+                e.preventDefault();
+                keyboardShortcutsEnabled = !keyboardShortcutsEnabled;
+                showNotification(keyboardShortcutsEnabled ? 'Keyboard shortcuts enabled' : 'Keyboard shortcuts disabled', 'warning');
+                break;
+        }
+    });
+    
+    function showKeyboardShortcuts() {
+        const modal = new bootstrap.Modal(document.getElementById('keyboardShortcutsModal'));
+        modal.show();
+    }
+    
+    function showNotification(message, type = 'info') {
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        alert.style.top = '20px';
+        alert.style.right = '20px';
+        alert.style.zIndex = '9999';
+        alert.innerHTML = `
+            <i class="fas fa-info-circle"></i> ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(alert);
+        
+        setTimeout(() => {
+            alert.remove();
+        }, 3000);
+    }
+    
+    // Enhanced timer management
+    function pauseExecutionTimer(executionId) {
+        if (executionTimers.has(executionId)) {
+            const timer = executionTimers.get(executionId);
+            clearInterval(timer.interval);
+            timer.pausedAt = Date.now();
+            return true;
+        }
+        return false;
+    }
+    
+    function resumeExecutionTimer(executionId) {
+        if (executionTimers.has(executionId)) {
+            const timer = executionTimers.get(executionId);
+            if (timer.pausedAt) {
+                timer.totalPausedTime += Date.now() - timer.pausedAt;
+                timer.pausedAt = null;
+                
+                timer.interval = setInterval(() => {
+                    const actualElapsed = Date.now() - timer.startTime - timer.totalPausedTime;
+                    timer.elapsed = Math.floor(actualElapsed / 1000);
+                    const panel = document.querySelector(`[data-execution-id="${executionId}"]`);
+                    const displays = panel.querySelectorAll('.timer-display');
+                    displays.forEach(display => {
+                        display.textContent = formatTime(timer.elapsed);
+                    });
+                }, 1000);
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    function resetExecutionTimer(executionId) {
+        // This function is currently not used, but kept for completeness
+        if (executionTimers.has(executionId)) {
+            clearInterval(executionTimers.get(executionId).interval);
+            executionTimers.delete(executionId);
+            
+            const panel = document.querySelector(`[data-execution-id="${executionId}"]`);
+            const displays = panel.querySelectorAll('.timer-display');
+            displays.forEach(display => {
+                display.textContent = '00:00:00';
+            });
+            
+            // Reset button states
+            const startBtn = panel.querySelector('.start-timer');
+            const pauseBtn = panel.querySelector('.pause-timer');
+            const stopBtn = panel.querySelector('.stop-timer');
+            
+            startBtn.disabled = false;
+            pauseBtn.disabled = true;
+            stopBtn.disabled = true;
+            
+            return true;
+        }
+        return false;
+    }
+    
+    // Auto-save functionality
+    let autoSaveInterval;
+    
+    function startAutoSave() {
+        autoSaveInterval = setInterval(() => {
+            testCasePanels.forEach(panel => {
+                const executionId = panel.getAttribute('data-execution-id');
+                const statusSelect = panel.querySelector('.execution-status-select');
+                const commentsTextarea = panel.querySelector('.execution-comments');
+                const actualResultsTextarea = panel.querySelector('.actual-results');
+                
+                // Only auto-save if there are changes and status is not 'not_executed'
+                // and it's not currently 'in_progress' without any actual results/comments
+                if (statusSelect.value !== 'not_executed' && 
+                    (commentsTextarea.value.trim() || actualResultsTextarea.value.trim() || statusSelect.value !== 'in_progress')) {
+                    saveExecutionResult(executionId, panel, true); // Silent save
+                }
+            });
+        }, 30000); // Auto-save every 30 seconds
+    }
+    
+    function stopAutoSave() {
+        if (autoSaveInterval) {
+            clearInterval(autoSaveInterval);
+            autoSaveInterval = null;
+        }
+    }
+    
+    // Enhanced progress tracking
+    function updateDetailedProgress() {
+        const executionStats = {
+            not_executed: 0,
+            in_progress: 0,
+            passed: 0,
+            failed: 0,
+            skipped: 0,
+            blocked: 0
+        };
+        
+        testCasePanels.forEach(panel => {
+            const statusSelect = panel.querySelector('.execution-status-select');
+            executionStats[statusSelect.value]++;
+        });
+        
+        const total = testCasePanels.length;
+        const executed = executionStats.passed + executionStats.failed + executionStats.skipped + executionStats.blocked;
+        const passRate = executed > 0 ? (executionStats.passed / executed) * 100 : 0;
+        
+        // Update progress badge with more detail
+        const progressBadge = document.getElementById('progress-badge');
+        progressBadge.textContent = `${executed}/${total} (${executionStats.in_progress} in progress)`;
+        
+        // Update pass rate
+        document.getElementById('pass-rate').textContent = `${passRate.toFixed(1)}%`;
+        
+        // Update progress bars with animation
+        const updateProgressBarElement = (id, value, totalCount) => {
+            const bar = document.getElementById(id);
+            if (bar) {
+                const percentage = totalCount > 0 ? (value / totalCount) * 100 : 0;
+                bar.style.transition = 'width 0.3s ease';
+                bar.style.width = `${percentage}%`;
+                const labelText = bar.textContent.split(' ').slice(1).join(' '); // Keep "Passed", "Failed" part
+                bar.textContent = value > 0 ? `${value} ${labelText}` : '';
+            }
+        };
+        
+        updateProgressBarElement('passed-progress', executionStats.passed, total);
+        updateProgressBarElement('failed-progress', executionStats.failed, total);
+        updateProgressBarElement('skipped-progress', executionStats.skipped, total);
+        updateProgressBarElement('blocked-progress', executionStats.blocked, total);
+        
+        // Update summary section
+        // Note: The summary section currently displays summary.passed etc. from Django context.
+        // For real-time updates without a full page reload, we need to update these elements dynamically.
+        // Assuming there's a simple way to access these, e.g., by their IDs or a more robust selection.
+        document.querySelector('.card.mt-4 .text-success h3').textContent = executionStats.passed;
+        document.querySelector('.card.mt-4 .text-danger h3').textContent = executionStats.failed;
+        document.querySelector('.card.mt-4 .text-warning h3').textContent = executionStats.skipped;
+        document.querySelector('.card.mt-4 .text-dark h3').textContent = executionStats.blocked;
+
+        return executionStats;
+    }
+    
+    // Override the original updateProgressBar function to use enhanced version
+    // The original updateProgressBar fetched data from the server.
+    // The new one calculates based on local state.
+    // To keep server sync, we could merge them or call both, but for real-time UI, local is faster.
+    // For this context, assuming the local update is preferred for quick feedback.
+    const originalUpdateProgressBar = window.updateProgressBar; // Store original reference if needed elsewhere
+    window.updateProgressBar = updateDetailedProgress; // Overwrite global function
+    
+    // Performance monitoring
+    let performanceMetrics = {
+        totalTestCases: testCasePanels.length,
+        averageExecutionTime: 0,
+        startTime: Date.now(),
+        completedTests: 0
+    };
+    
+    function updatePerformanceMetrics() {
+        const completed = Array.from(testCasePanels).filter(panel => {
+            const status = panel.querySelector('.execution-status-select').value;
+            return ['passed', 'failed', 'skipped', 'blocked'].includes(status);
+        }).length;
+        
+        performanceMetrics.completedTests = completed;
+        
+        if (completed > 0) {
+            const elapsedGlobalTime = (Date.now() - performanceMetrics.startTime) / 1000 / 60; // in minutes
+            performanceMetrics.averageExecutionTime = elapsedGlobalTime / completed;
+        }
+        // console.log("Performance Metrics:", performanceMetrics); // For debugging
+    }
+    
+    // Persistence - save state to localStorage
+    function saveExecutionState() {
+        const testCaseStates = [];
+        testCasePanels.forEach(panel => {
+            const executionId = panel.getAttribute('data-execution-id');
+            const status = panel.querySelector('.execution-status-select').value;
+            const comments = panel.querySelector('.actual-results').value;
+            const notes = panel.querySelector('.execution-comments').value;
+            const timerData = executionTimers.has(executionId) ? executionTimers.get(executionId) : null;
+            
+            testCaseStates.push({
+                executionId: executionId,
+                status: status,
+                comments: comments,
+                notes: notes,
+                timerElapsed: timerData ? timerData.elapsed : 0,
+                timerStartTime: timerData ? timerData.startTime : null,
+                timerPausedAt: timerData ? timerData.pausedAt : null,
+                timerTotalPausedTime: timerData ? timerData.totalPausedTime : 0
+            });
+        });
+
+        const state = {
+            currentTestCaseIndex: currentTestCaseIndex,
+            totalExecutionTime: totalExecutionTime,
+            testRunId: {{ test_run.id }},
+            testCaseStates: testCaseStates,
+            timestamp: Date.now()
+        };
+        
+        localStorage.setItem(`testRun_${{{ test_run.id }}}_state`, JSON.stringify(state));
+    }
+    
+    function loadExecutionState() {
+        const saved = localStorage.getItem(`testRun_${{{ test_run.id }}}_state`);
+        if (saved) {
+            try {
+                const state = JSON.parse(saved);
+                // Only restore if saved for the same test run and less than 24 hours ago
+                if (state.testRunId === {{ test_run.id }} && (Date.now() - state.timestamp < 24 * 60 * 60 * 1000)) {
+                    currentTestCaseIndex = state.currentTestCaseIndex || 0;
+                    totalExecutionTime = state.totalExecutionTime || 0;
+                    updateNavigationButtons();
+                    document.getElementById('total-time').textContent = formatTime(totalExecutionTime);
+
+                    state.testCaseStates.forEach(savedState => {
+                        const panel = document.querySelector(`[data-execution-id="${savedState.executionId}"]`);
+                        if (panel) {
+                            panel.querySelector('.execution-status-select').value = savedState.status;
+                            panel.querySelector('.actual-results').value = savedState.comments;
+                            panel.querySelector('.execution-comments').value = savedState.notes;
+                            updateExecutionStatus(panel, savedState.status); // Update badge
+
+                            if (savedState.timerStartTime && savedState.status === 'in_progress') {
+                                // Recreate timer instance if it was in progress
+                                const timer = {
+                                    startTime: savedState.timerStartTime,
+                                    elapsed: savedState.timerElapsed,
+                                    pausedAt: savedState.timerPausedAt,
+                                    totalPausedTime: savedState.timerTotalPausedTime || 0,
+                                    interval: null
+                                };
+                                executionTimers.set(savedState.executionId, timer);
+                                
+                                const displays = panel.querySelectorAll('.timer-display');
+                                displays.forEach(display => {
+                                    display.textContent = formatTime(timer.elapsed);
+                                });
+
+                                // If paused, update button text
+                                const pauseBtn = panel.querySelector('.pause-timer');
+                                if (timer.pausedAt) {
+                                    pauseBtn.innerHTML = '<i class="fas fa-play"></i> Resume';
+                                } else {
+                                    startExecutionTimer(savedState.executionId); // Restart timer interval
+                                }
+
+                                const startBtn = panel.querySelector('.start-timer');
+                                const stopBtn = panel.querySelector('.stop-timer');
+                                startBtn.disabled = true;
+                                pauseBtn.disabled = false;
+                                stopBtn.disabled = false;
+                                panel.querySelector('.execution-timer').style.display = 'inline-block';
+
+                            } else if (savedState.timerElapsed > 0 && ['passed', 'failed', 'skipped', 'blocked'].includes(savedState.status)) {
+                                // For completed tests with a recorded time, just display it
+                                const displays = panel.querySelectorAll('.timer-display');
+                                displays.forEach(display => {
+                                    display.textContent = formatTime(savedState.timerElapsed);
+                                });
+                                panel.querySelector('.execution-timer').style.display = 'inline-block';
+                            }
+                        }
+                    });
+                    updateDetailedProgress(); // Refresh overall progress based on loaded states
+                } else {
+                    console.info('Ignoring stale or incorrect state from localStorage.');
+                    localStorage.removeItem(`testRun_${{{ test_run.id }}}_state`); // Clear old state
+                }
+            } catch (e) {
+                console.warn('Failed to load execution state from localStorage:', e);
+                localStorage.removeItem(`testRun_${{{ test_run.id }}}_state`); // Clear corrupted state
+            }
+        }
+    }
+    
+    // Initialize enhanced features
+    startAutoSave();
+    loadExecutionState();
+    updateDetailedProgress();
+    
+    // Add help button to header
+    const headerButtons = document.querySelector('.d-flex.justify-content-between.align-items-center div:last-child');
+    if (headerButtons) {
+        const helpBtn = document.createElement('button');
+        helpBtn.className = 'btn btn-outline-info ms-2';
+        helpBtn.innerHTML = '<i class="fas fa-keyboard"></i> Help (?)';
+        helpBtn.title = 'Show keyboard shortcuts';
+        helpBtn.addEventListener('click', showKeyboardShortcuts);
+        headerButtons.appendChild(helpBtn);
+    }
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+        stopAutoSave();
+        saveExecutionState();
+        
+        // Stop all timers
+        executionTimers.forEach((timer, executionId) => {
+            clearInterval(timer.interval);
+        });
+        
+        if (globalTimer) {
+            clearInterval(globalTimer);
+        }
+    });
+    
+    // Enhanced save execution function with silent option
+    const originalSaveExecutionResult = window.saveExecutionResult; // This was not globally defined, but safe to do this pattern
+    window.saveExecutionResult = function(executionId, panel, silent = false) {
+        const statusSelect = panel.querySelector('.execution-status-select');
+        const commentsTextarea = panel.querySelector('.execution-comments'); // This is actual results now
+        const notesTextarea = panel.querySelector('.execution-comments'); // This is execution comments
+        const executionTime = executionTimers.has(executionId) ? 
+            Math.floor(executionTimers.get(executionId).elapsed / 60) : null;
+        
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        formData.append('status', statusSelect.value);
+        formData.append('comments', commentsTextarea.value); // Sending actual results to 'comments'
+        formData.append('notes', notesTextarea.value); // Sending execution notes to 'notes'
+        if (executionTime !== null) { // Only send if a timer was actually run/stopped
+            formData.append('execution_time_minutes', executionTime);
+        } else {
+            // If timer was never started, ensure the field is not sent or is null/empty on server side
+            // For existing executions, backend should handle null/blank correctly.
+            // If the timer display in the UI for a non-running test changes due to user,
+            // we might want to send 0 or just not send this field.
+            // For now, only send if timer was active.
+        }
+        
+        fetch(`{% url 'test_cases:test_execution_record' 0 %}`.replace('0', executionId), {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(errorData => { throw new Error(JSON.stringify(errorData)); });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                if (!silent) {
+                    showNotification('Execution result saved successfully!', 'success');
+                }
+                updatePerformanceMetrics();
+                saveExecutionState();
+            } else {
+                if (!silent) {
+                    showNotification('Error saving execution result: ' + JSON.stringify(data.errors), 'danger');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            if (!silent) {
+                showNotification('Error saving execution result: ' + error.message, 'danger');
+            }
+        });
+    };
+    
+    // Periodic progress updates
+    setInterval(updateDetailedProgress, 5000); // Update every 5 seconds
+});{% endblock %}

@@ -10,6 +10,8 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.db.models import Avg
 from datetime import timedelta
+from django.template.loader import render_to_string
+from django.urls import reverse
 from .models import Project, Epic, UserStory, TestCase, TestRun, TestExecution, TestSuite
 from .forms import (
     ProjectForm, EpicForm, UserStoryForm, TestCaseForm,
@@ -123,7 +125,6 @@ def dashboard(request):
         'recent_testcases': recent_testcases,
         'recent_executions': recent_executions,
     }
-
     return render(request, 'dashboard.html', context)
 
 
@@ -662,6 +663,51 @@ def test_run_delete(request, pk):
 
 
 @login_required
+def test_run_create_from_suite(request):
+    """AJAX endpoint to create test run from suite"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    suite_id = request.POST.get('suite_id')
+    test_run_name = request.POST.get('test_run_name')
+    test_run_description = request.POST.get('test_run_description', '')
+
+    if not suite_id or not test_run_name:
+        return JsonResponse({'error': 'Missing required fields'}, status=400)
+
+    try:
+        suite = TestSuite.objects.get(id=suite_id, created_by=request.user)
+
+        # Create test run
+        test_run = TestRun.objects.create(
+            name=test_run_name,
+            description=test_run_description,
+            created_by=request.user
+        )
+
+        # Create test executions for all test cases in suite
+        executions = []
+        for test_case in suite.test_cases.all():
+            execution = TestExecution.objects.create(
+                testcase=test_case,
+                test_run=test_run,
+                executor=request.user
+            )
+            executions.append(execution)
+
+        return JsonResponse({
+            'success': True,
+            'test_run_id': test_run.id,
+            'redirect_url': reverse('test_cases:test_run_execute', args=[test_run.id])
+        })
+
+    except TestSuite.DoesNotExist:
+        return JsonResponse({'error': 'Test suite not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
 def test_run_execute(request, pk):
     test_run = get_object_or_404(TestRun, pk=pk, created_by=request.user)
     executions = test_run.test_executions.all().order_by('testcase__priority', 'id')
@@ -694,31 +740,31 @@ def test_execution_dashboard(request):
     # Get user's test executions
     user_projects = Project.objects.filter(created_by=request.user)
     user_testcases = TestCase.objects.filter(user_story__epic__project__in=user_projects)
-    executions = TestExecution.objects.filter(testcase__in=user_testcases)
+    all_executions = TestExecution.objects.filter(testcase__in=user_testcases)
 
     # Calculate metrics
-    total_executions = executions.count()
-    recent_executions = executions.filter(
+    total_executions = all_executions.count()
+    recent_executions = all_executions.filter(
         execution_date__gte=timezone.now() - timedelta(days=30)
     ).count()
 
     # Status distribution
     status_counts = {}
     for status, label in TestExecution.STATUS_CHOICES:
-        status_counts[label] = executions.filter(status=status).count()
+        status_counts[label] = all_executions.filter(status=status).count()
 
     # Pass rate calculation
-    executed_tests = executions.exclude(status__in=['not_executed', 'in_progress'])
+    executed_tests = all_executions.exclude(status__in=['not_executed', 'in_progress'])
     passed_tests = executed_tests.filter(status='passed')
     pass_rate = (passed_tests.count() / executed_tests.count() * 100) if executed_tests.count() > 0 else 0
 
     # Average execution time
-    avg_execution_time = executions.filter(
+    avg_execution_time = all_executions.filter(
         execution_time_minutes__isnull=False
     ).aggregate(avg_time=Avg('execution_time_minutes'))['avg_time'] or 0
 
     # Recent executions for timeline
-    recent_timeline = executions.filter(
+    recent_timeline = all_executions.filter(
         execution_date__isnull=False
     ).order_by('-execution_date')[:10]
 
@@ -795,6 +841,195 @@ def test_execution_record(request, pk):
 
 
 @login_required
+def test_execution_detail_ajax(request, pk):
+    execution = get_object_or_404(TestExecution, pk=pk)
+
+    # Check user access
+    if execution.testcase.user_story.epic.project.created_by != request.user:
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    # Get priority color mapping
+    priority_colors = {
+        'critical': 'danger',
+        'high': 'warning',
+        'medium': 'primary',
+        'low': 'secondary'
+    }
+
+    # Get status color mapping
+    status_colors = {
+        'not_executed': 'secondary',
+        'in_progress': 'primary',
+        'passed': 'success',
+        'failed': 'danger',
+        'skipped': 'warning',
+        'blocked': 'dark'
+    }
+
+    # Parse test steps for step-by-step execution details
+    steps = []
+    # Prioritize actual execution steps if they exist
+    if hasattr(execution, 'execution_steps') and execution.execution_steps.exists():
+        for step in execution.execution_steps.all().order_by('step_number'):
+            steps.append({
+                'number': step.step_number,
+                'description': step.description,
+                'expected_result': step.expected_result,
+                'actual_result': step.actual_result,
+                'status': step.get_status_display(),
+                'status_color': status_colors.get(step.status, 'secondary'),
+                'comments': step.comments
+            })
+
+    data = {
+        'testcase_name': execution.testcase.name,
+        'priority': execution.testcase.get_priority_display(),
+        'priority_color': priority_colors.get(execution.testcase.priority, 'secondary'),
+        'user_story': execution.testcase.user_story.name,
+        'project': execution.testcase.user_story.epic.project.name,
+        'status': execution.get_status_display(),
+        'status_color': status_colors.get(execution.status, 'secondary'),
+        'executor': execution.executor.get_full_name() if execution.executor else 'Unassigned',
+        'execution_date': execution.execution_date.strftime('%Y-%m-%d %H:%M') if execution.execution_date else 'Not executed',
+        'execution_time': f"{execution.execution_time_minutes} min" if execution.execution_time_minutes else 'N/A',
+        'comments': execution.comments or 'No comments',
+        'steps': steps
+    }
+
+    return JsonResponse(data)
+
+
+@login_required
+def test_execution_summary_data(request):
+    user_projects = Project.objects.filter(created_by=request.user)
+    user_testcases = TestCase.objects.filter(user_story__epic__project__in=user_projects)
+    executions = TestExecution.objects.filter(testcase__in=user_testcases)
+
+    # Apply same filters as report view
+    form = TestExecutionReportForm(request.GET, user=request.user)
+    form_is_valid = form.is_valid()
+    if form_is_valid:
+        if form.cleaned_data['date_from']:
+            executions = executions.filter(execution_date__gte=form.cleaned_data['date_from'])
+        if form.cleaned_data['date_to']:
+            # Adjust date_to to include the whole day
+            date_to = form.cleaned_data['date_to'] + timedelta(days=1) - timedelta(microseconds=1)
+            executions = executions.filter(execution_date__lte=date_to)
+        if form.cleaned_data['project']:
+            executions = executions.filter(testcase__user_story__epic__project=form.cleaned_data['project'])
+        if form.cleaned_data['epic']:
+            executions = executions.filter(testcase__user_story__epic=form.cleaned_data['epic'])
+        if form.cleaned_data['status']:
+            executions = executions.filter(status=form.cleaned_data['status'])
+        if form.cleaned_data['executor']:
+            executions = executions.filter(executor=form.cleaned_data['executor'])
+
+    # Calculate summary statistics
+    status_counts = {}
+    for status, _ in TestExecution.STATUS_CHOICES:
+        status_counts[status] = executions.filter(status=status).count()
+
+    executed_tests = executions.exclude(status__in=['not_executed', 'in_progress'])
+    passed_count = status_counts.get('passed', 0)
+    failed_count = status_counts.get('failed', 0)
+    pass_rate = (passed_count / executed_tests.count() * 100) if executed_tests.count() > 0 else 0
+
+    # Calculate execution time statistics
+    timed_executions = executions.filter(execution_time_minutes__isnull=False)
+    avg_execution_time = timed_executions.aggregate(avg_time=Avg('execution_time_minutes'))['avg_time'] or 0
+    total_execution_time = sum([e.execution_time_minutes for e in timed_executions if e.execution_time_minutes is not None])
+
+    # Get unique executors count
+    unique_executors = executions.exclude(executor__isnull=True).values('executor').distinct().count()
+
+    # Calculate date range
+    date_range = "All Time"
+    if form_is_valid and (form.cleaned_data['date_from'] or form.cleaned_data['date_to']):
+        date_from = form.cleaned_data['date_from'].strftime('%Y-%m-%d') if form.cleaned_data['date_from'] else 'Start'
+        display_date_to = (form.cleaned_data['date_to']).strftime('%Y-%m-%d') if form.cleaned_data['date_to'] else 'End'
+        date_range = f"{date_from} to {display_date_to}"
+
+    # Generate trends data (last 30 days)
+    trends_data = {'labels': [], 'total': [], 'passed': [], 'failed': []}
+    # Only generate trends if no date filters are applied, or a general 30-day view is requested
+    # If specific date filters are active, trends should be based on that narrow range or suppressed.
+    # For this implementation, we will generate trends for the last 30 days if no date filters are present,
+    # otherwise, the trends data will be empty.
+    if not (form_is_valid and (form.cleaned_data['date_from'] or form.cleaned_data['date_to'])):
+        for i in range(29, -1, -1):
+            date = timezone.now().date() - timedelta(days=i)
+            day_executions = executions.filter(execution_date__date=date)
+            trends_data['labels'].append(date.strftime('%m/%d'))
+            trends_data['total'].append(day_executions.count())
+            trends_data['passed'].append(day_executions.filter(status='passed').count())
+            trends_data['failed'].append(day_executions.filter(status='failed').count())
+
+    data = {
+        'passed_count': passed_count,
+        'failed_count': failed_count,
+        'pass_rate': round(pass_rate, 1),
+        'avg_execution_time': round(avg_execution_time, 1),
+        'total_execution_time': total_execution_time,
+        'unique_executors': unique_executors,
+        'date_range': date_range,
+        'status_distribution': {status: count for status, count in status_counts.items()},
+        'trends': trends_data
+    }
+
+    return JsonResponse(data)
+
+
+@login_required
+def test_execution_project_breakdown(request):
+    user_projects = Project.objects.filter(created_by=request.user)
+
+    projects_data = []
+    # Apply same filters as report view, but for each project
+    form = TestExecutionReportForm(request.GET, user=request.user)
+    form_is_valid = form.is_valid()
+
+    for project in user_projects:
+        project_testcases = TestCase.objects.filter(user_story__epic__project=project)
+        project_executions = TestExecution.objects.filter(testcase__in=project_testcases)
+
+        if form_is_valid:
+            if form.cleaned_data['date_from']:
+                project_executions = project_executions.filter(execution_date__gte=form.cleaned_data['date_from'])
+            if form.cleaned_data['date_to']:
+                date_to = form.cleaned_data['date_to'] + timedelta(days=1) - timedelta(microseconds=1)
+                project_executions = project_executions.filter(execution_date__lte=date_to)
+            if form.cleaned_data['status']:
+                project_executions = project_executions.filter(status=form.cleaned_data['status'])
+            if form.cleaned_data['executor']:
+                project_executions = project_executions.filter(executor=form.cleaned_data['executor'])
+
+        total_executions = project_executions.count()
+        if total_executions > 0:
+            executed_tests = project_executions.exclude(status__in=['not_executed', 'in_progress'])
+            passed_tests = executed_tests.filter(status='passed')
+            pass_rate = (passed_tests.count() / executed_tests.count() * 100) if executed_tests.count() > 0 else 0
+
+            avg_time = project_executions.filter(
+                execution_time_minutes__isnull=False
+            ).aggregate(avg_time=Avg('execution_time_minutes'))['avg_time'] or 0
+
+            last_execution = project_executions.filter(
+                execution_date__isnull=False
+            ).order_by('-execution_date').first()
+
+            projects_data.append({
+                'id': project.id,
+                'name': project.name,
+                'total_executions': total_executions,
+                'pass_rate': round(pass_rate, 1),
+                'avg_time': round(avg_time, 1),
+                'last_execution': last_execution.execution_date.strftime('%Y-%m-%d %H:%M') if last_execution else None
+            })
+
+    return JsonResponse({'projects': projects_data})
+
+
+@login_required
 def test_execution_report(request):
     user_projects = Project.objects.filter(created_by=request.user)
     user_testcases = TestCase.objects.filter(user_story__epic__project__in=user_projects)
@@ -807,7 +1042,9 @@ def test_execution_report(request):
         if form.cleaned_data['date_from']:
             executions = executions.filter(execution_date__gte=form.cleaned_data['date_from'])
         if form.cleaned_data['date_to']:
-            executions = executions.filter(execution_date__lte=form.cleaned_data['date_to'])
+            # Adjust date_to to include the whole day
+            date_to = form.cleaned_data['date_to'] + timedelta(days=1) - timedelta(microseconds=1)
+            executions = executions.filter(execution_date__lte=date_to)
         if form.cleaned_data['project']:
             executions = executions.filter(testcase__user_story__epic__project=form.cleaned_data['project'])
         if form.cleaned_data['epic']:
@@ -841,7 +1078,9 @@ def test_execution_export(request):
         if form.cleaned_data['date_from']:
             executions = executions.filter(execution_date__gte=form.cleaned_data['date_from'])
         if form.cleaned_data['date_to']:
-            executions = executions.filter(execution_date__lte=form.cleaned_data['date_to'])
+            # Adjust date_to to include the whole day
+            date_to = form.cleaned_data['date_to'] + timedelta(days=1) - timedelta(microseconds=1)
+            executions = executions.filter(execution_date__lte=date_to)
         if form.cleaned_data['project']:
             executions = executions.filter(testcase__user_story__epic__project=form.cleaned_data['project'])
         if form.cleaned_data['epic']:
@@ -997,6 +1236,29 @@ def test_suite_delete(request, pk):
 
 
 # Additional AJAX Views
+@login_required
+def test_suite_stats(request):
+    """AJAX endpoint for test suite statistics"""
+    if not request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'error': 'Invalid request'}, status=400)
+
+    test_suites = TestSuite.objects.filter(created_by=request.user)
+
+    suites_data = []
+    for suite in test_suites:
+        stats = suite.get_test_case_statistics()
+        suites_data.append({
+            'id': suite.id,
+            'name': suite.name,
+            'stats': stats,
+            'stats_html': render_to_string('test_suites/stats_badges.html', {
+                'suite_stats': stats
+            }, request=request)
+        })
+
+    return JsonResponse({'suites': suites_data})
+
+
 @login_required
 def get_test_cases_by_filters(request):
     project_id = request.GET.get('project_id')

@@ -1,3 +1,4 @@
+test_cases/templates/test_suites/list.html
 {% extends 'base.html' %}
 
 {% block title %}Test Suites - Test Case Management{% endblock %}
@@ -145,7 +146,7 @@
                                 </thead>
                                 <tbody>
                                     {% for suite in test_suites %}
-                                        <tr>
+                                        <tr data-suite-id="{{ suite.id }}">
                                             <td>
                                                 <input type="checkbox" class="form-check-input suite-checkbox" 
                                                        value="{{ suite.id }}">
@@ -167,7 +168,7 @@
                                             <td>
                                                 <span class="badge bg-primary">{{ suite.test_cases.count }} test cases</span>
                                             </td>
-                                            <td>
+                                            <td class="suite-stats">
                                                 {% with suite_stats=suite.get_test_case_statistics %}
                                                     <div class="d-flex flex-wrap gap-1">
                                                         {% if suite_stats.critical > 0 %}
@@ -609,10 +610,10 @@ document.addEventListener('DOMContentLoaded', function() {
             // Create bulk execution form
             const form = document.createElement('form');
             form.method = 'POST';
-            form.action = '{% url "test_cases:test_suite_list" %}';
+            form.action = '{% url "test_cases:test_suite_list" %}'; // Or a dedicated bulk execute endpoint if desired
             
             // Add CSRF token
-            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
             const csrfInput = document.createElement('input');
             csrfInput.type = 'hidden';
             csrfInput.name = 'csrfmiddlewaretoken';
@@ -620,4 +621,691 @@ document.addEventListener('DOMContentLoaded', function() {
             form.appendChild(csrfInput);
             
             // Add bulk action indicator
-            const actionInput
+            const actionInput = document.createElement('input');
+            actionInput.type = 'hidden';
+            actionInput.name = 'bulk_action';
+            actionInput.value = 'execute';
+            form.appendChild(actionInput);
+            
+            // Add suite IDs
+            suiteIds.forEach(id => {
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'suite_ids';
+                idInput.value = id;
+                form.appendChild(idInput);
+            });
+            
+            document.body.appendChild(form);
+            form.submit();
+        }
+    });
+    
+    // Bulk delete functionality
+    document.getElementById('bulk-delete-btn').addEventListener('click', function() {
+        const checkedBoxes = document.querySelectorAll('.suite-checkbox:checked');
+        
+        if (checkedBoxes.length === 0) {
+            alert('Please select at least one test suite.');
+            return;
+        }
+        
+        if (confirm(`Delete ${checkedBoxes.length} selected test suite(s)? This action cannot be undone.`)) {
+            const suiteIds = Array.from(checkedBoxes).map(cb => cb.value);
+            
+            // Create bulk delete form
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '{% url "test_cases:test_suite_list" %}'; // Or a dedicated bulk delete endpoint if desired
+            
+            // Add CSRF token
+            const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrfmiddlewaretoken';
+            csrfInput.value = csrfToken;
+            form.appendChild(csrfInput);
+            
+            // Add bulk action indicator
+            const actionInput = document.createElement('input');
+            actionInput.type = 'hidden';
+            actionInput.name = 'bulk_action';
+            actionInput.value = 'delete';
+            form.appendChild(actionInput);
+            
+            // Add suite IDs
+            suiteIds.forEach(id => {
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'suite_ids';
+                idInput.value = id;
+                form.appendChild(idInput);
+            });
+            
+            document.body.appendChild(form);
+            form.submit();
+        }
+    });
+    
+    // Execute suite modal functionality
+    const executeSuiteModal = new bootstrap.Modal(document.getElementById('executeSuiteModal'));
+    const executeSuiteForm = document.getElementById('execute-suite-form');
+    
+    document.querySelectorAll('.execute-suite-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const suiteId = this.dataset.suiteId;
+            const suiteName = this.dataset.suiteName;
+            
+            document.getElementById('suite-id').value = suiteId;
+            document.getElementById('test-run-name').value = `${suiteName} - ${new Date().toLocaleDateString()}`;
+            
+            executeSuiteModal.show();
+        });
+    });
+    
+    executeSuiteForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        
+        fetch('{% url "test_cases:test_run_create_from_suite" %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                executeSuiteModal.hide();
+                window.location.href = data.redirect_url;
+            } else {
+                alert('Error creating test run: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error creating test run');
+        });
+    });
+    
+    // Initialize charts for each test suite
+    {% for suite in test_suites %}
+        {% with suite_stats=suite.get_test_case_statistics %}
+            if (document.getElementById('suiteChart{{ suite.pk }}')) {
+                const ctx{{ suite.pk }} = document.getElementById('suiteChart{{ suite.pk }}').getContext('2d');
+                new Chart(ctx{{ suite.pk }}, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Critical', 'High', 'Medium', 'Low'],
+                        datasets: [{
+                            data: [
+                                {{ suite_stats.critical }},
+                                {{ suite_stats.high }},
+                                {{ suite_stats.medium }},
+                                {{ suite_stats.low }}
+                            ],
+                            backgroundColor: [
+                                '#dc3545',
+                                '#ffc107',
+                                '#007bff',
+                                '#6c757d'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false // Legend handled by custom HTML below chart
+                            }
+                        }
+                    }
+                });
+            }
+        {% endwith %}
+    {% endfor %}
+    
+    // Auto-refresh functionality for statistics
+    let autoRefreshInterval;
+    
+    function startAutoRefresh() {
+        // Clear any existing interval to prevent duplicates
+        stopAutoRefresh(); 
+        autoRefreshInterval = setInterval(() => {
+            // Refresh suite statistics via AJAX
+            fetch('{% url "test_cases:test_suite_stats" %}', {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest' // Identify as AJAX request
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Update statistics in the UI
+                data.suites.forEach(suite => {
+                    const row = document.querySelector(`tr[data-suite-id="${suite.id}"]`);
+                    if (row) {
+                        const statsCell = row.querySelector('.suite-stats');
+                        if (statsCell) {
+                            statsCell.innerHTML = suite.stats_html;
+                        }
+                    }
+                });
+            })
+            .catch(error => console.error('Auto-refresh error:', error));
+        }, 30000); // Refresh every 30 seconds
+    }
+    
+    function stopAutoRefresh() {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    }
+    
+    // Advanced filtering functionality (Debounce search input)
+    const filterForm = document.querySelector('form[method="get"]');
+    let filterTimeout;
+    
+    function debounceFilter() {
+        clearTimeout(filterTimeout);
+        filterTimeout = setTimeout(() => {
+            filterForm.submit();
+        }, 500); // Wait 500ms after last input to submit
+    }
+    
+    // Add debounced search
+    document.getElementById('search').addEventListener('input', debounceFilter);
+    
+    // Initialize filter state
+    updateBulkActionsState();
+    
+    // Start auto-refresh if there are test suites displayed
+    if (document.querySelectorAll('.suite-checkbox').length > 0) {
+        startAutoRefresh();
+    }
+    
+    // Stop auto-refresh when page is hidden
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            stopAutoRefresh();
+        } else {
+            // Re-fetch immediately when tab becomes active, then start interval
+            fetch('{% url "test_cases:test_suite_stats" %}', {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                data.suites.forEach(suite => {
+                    const row = document.querySelector(`tr[data-suite-id="${suite.id}"]`);
+                    if (row) {
+                        const statsCell = row.querySelector('.suite-stats');
+                        if (statsCell) {
+                            statsCell.innerHTML = suite.stats_html;
+                        }
+                    }
+                });
+                startAutoRefresh();
+            })
+            .catch(error => {
+                console.error('Error fetching on visibility change:', error);
+                startAutoRefresh(); // Start interval even if initial fetch fails
+            });
+        }
+    });
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+        stopAutoRefresh();
+    });
+});
+</script>
+{% endblock %}
+test_cases/models.py
+from django.db import models
+from django.contrib.auth.models import User
+from django.utils import timezone
+
+# Assuming TestCase, Epic, UserStory, Project models are defined earlier in this file
+# For instance, if TestCase is defined like this (example structure):
+# class TestCase(models.Model):
+#     name = models.CharField(max_length=255)
+#     description = models.TextField(blank=True)
+#     priority = models.CharField(max_length=20, choices=[('critical', 'Critical'), ('high', 'High'), ('medium', 'Medium'), ('low', 'Low')])
+#     status = models.CharField(max_length=20, choices=[('draft', 'Draft'), ('ready', 'Ready'), ('blocked', 'Blocked')], default='draft')
+#     is_automated = models.BooleanField(default=False)
+#     user_story = models.ForeignKey('UserStory', on_delete=models.SET_NULL, null=True, blank=True, related_name='test_cases')
+#     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_testcases')
+#     created_date = models.DateTimeField(default=timezone.now)
+#
+#     def __str__(self):
+#         return self.name
+
+class TestSuite(models.Model):
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    test_cases = models.ManyToManyField('TestCase', related_name='test_suites')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_test_suites')
+    created_date = models.DateTimeField(default=timezone.now)
+    
+    class Meta:
+        ordering = ['-created_date']
+        verbose_name_plural = "Test Suites"
+    
+    def __str__(self):
+        return self.name
+
+    def get_test_case_statistics(self):
+        """Get statistics about test cases in this suite"""
+        test_cases = self.test_cases.all()
+        
+        stats = {
+            'total': test_cases.count(),
+            'critical': test_cases.filter(priority='critical').count(),
+            'high': test_cases.filter(priority='high').count(),
+            'medium': test_cases.filter(priority='medium').count(),
+            'low': test_cases.filter(priority='low').count(),
+            'automated': test_cases.filter(is_automated=True).count(),
+            'manual': test_cases.filter(is_automated=False).count(),
+            'ready': test_cases.filter(status='ready').count(),
+            'draft': test_cases.filter(status='draft').count(),
+            'blocked': test_cases.filter(status='blocked').count(),
+        }
+        
+        return stats
+
+
+class TestRun(models.Model):
+    STATUS_CHOICES = [
+        ('not_started', 'Not Started'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_started')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_test_runs')
+    created_date = models.DateTimeField(default=timezone.now)
+    updated_date = models.DateTimeField(auto_now=True)
+    scheduled_date = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_date']
+        verbose_name_plural = "Test Runs"
+    
+    def __str__(self):
+        return self.name
+    
+    def get_execution_summary(self):
+        executions = self.test_executions.all()
+        
+        total = executions.count()
+        if total == 0:
+            return {
+                'total': 0,
+                'not_executed': 0,
+                'in_progress': 0,
+                'passed': 0,
+                'failed': 0,
+                'skipped': 0,
+                'blocked': 0,
+                'pass_rate': 0,
+            }
+        
+        not_executed = executions.filter(status='not_executed').count()
+        in_progress = executions.filter(status='in_progress').count()
+        passed = executions.filter(status='passed').count()
+        failed = executions.filter(status='failed').count()
+        skipped = executions.filter(status='skipped').count()
+        blocked = executions.filter(status='blocked').count()
+        
+        executed = passed + failed + skipped + blocked
+        pass_rate = (passed / executed * 100) if executed > 0 else 0
+        
+        return {
+            'total': total,
+            'not_executed': not_executed,
+            'in_progress': in_progress,
+            'passed': passed,
+            'failed': failed,
+            'skipped': skipped,
+            'blocked': blocked,
+            'pass_rate': pass_rate,
+        }
+
+
+class TestExecution(models.Model):
+    STATUS_CHOICES = [
+        ('not_executed', 'Not Executed'),
+        ('in_progress', 'In Progress'),
+        ('passed', 'Passed'),
+        ('failed', 'Failed'),
+        ('skipped', 'Skipped'),
+        ('blocked', 'Blocked'),
+    ]
+    
+    testcase = models.ForeignKey('TestCase', on_delete=models.CASCADE, related_name='test_executions')
+    test_run = models.ForeignKey(TestRun, on_delete=models.CASCADE, related_name='test_executions')
+    executor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='test_executions')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_executed')
+    execution_date = models.DateTimeField(null=True, blank=True)
+    comments = models.TextField(blank=True)
+    execution_time_minutes = models.PositiveIntegerField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    
+    class Meta:
+        ordering = ['testcase__priority', 'execution_date']
+        verbose_name_plural = "Test Executions"
+    
+    def __str__(self):
+        return f"{self.test_run.name} - {self.testcase.name} - {self.get_status_display()}"
+
+
+class TestExecutionStep(models.Model):
+    STATUS_CHOICES = [
+        ('not_executed', 'Not Executed'),
+        ('passed', 'Passed'),
+        ('failed', 'Failed'),
+        ('skipped', 'Skipped'),
+    ]
+    
+    test_execution = models.ForeignKey(TestExecution, on_delete=models.CASCADE, related_name='execution_steps')
+    step_number = models.PositiveIntegerField()
+    step_description = models.TextField()
+    expected_result = models.TextField()
+    actual_result = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_executed')
+    execution_date = models.DateTimeField(null=True, blank=True)
+    comments = models.TextField(blank=True)
+    
+    class Meta:
+        ordering = ['test_execution', 'step_number']
+        verbose_name_plural = "Test Execution Steps"
+    
+    def __str__(self):
+        return f"{self.test_execution.testcase.name} - Step {self.step_number}"
+test_cases/templates/test_suites/stats_badges.html
+<div class="d-flex flex-wrap gap-1">
+    {% if suite_stats.critical > 0 %}
+        <span class="badge bg-danger" title="Critical Priority">
+            <i class="fas fa-exclamation-triangle"></i> {{ suite_stats.critical }}
+        </span>
+    {% endif %}
+    {% if suite_stats.high > 0 %}
+        <span class="badge bg-warning" title="High Priority">
+            <i class="fas fa-arrow-up"></i> {{ suite_stats.high }}
+        </span>
+    {% endif %}
+    {% if suite_stats.medium > 0 %}
+        <span class="badge bg-primary" title="Medium Priority">
+            <i class="fas fa-minus"></i> {{ suite_stats.medium }}
+        </span>
+    {% endif %}
+    {% if suite_stats.low > 0 %}
+        <span class="badge bg-secondary" title="Low Priority">
+            <i class="fas fa-arrow-down"></i> {{ suite_stats.low }}
+        </span>
+    {% endif %}
+    {% if suite_stats.automated > 0 %}
+        <span class="badge bg-info" title="Automated Test Cases">
+            <i class="fas fa-robot"></i> {{ suite_stats.automated }}
+        </span>
+    {% endif %}
+</div>
+test_cases/views.py
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db.models import Q
+from django.core.paginator import Paginator
+from django.http import JsonResponse
+from django.template.loader import render_to_string
+from django.urls import reverse
+
+from .models import Project, Epic, UserStory, TestCase, TestSuite, TestRun, TestExecution
+from .forms import TestSuiteForm # Assuming TestSuiteForm is defined elsewhere
+
+@login_required
+def test_suite_list(request):
+    test_suites = TestSuite.objects.filter(created_by=request.user)
+
+    # Handle bulk actions
+    if request.method == 'POST':
+        bulk_action = request.POST.get('bulk_action')
+        suite_ids = request.POST.getlist('suite_ids')
+
+        if bulk_action == 'execute':
+            # This is handled via AJAX to create a test run
+            # For form submission, you might redirect or show a message
+            messages.info(request, f"Bulk execute action initiated for {len(suite_ids)} suites. A test run will be created.")
+            # In a real scenario, this might trigger background tasks or direct to a test run creation page
+        elif bulk_action == 'delete':
+            suites_to_delete = TestSuite.objects.filter(id__in=suite_ids, created_by=request.user)
+            deleted_count = suites_to_delete.count()
+            suites_to_delete.delete()
+            messages.success(request, f"{deleted_count} test suite(s) deleted successfully!")
+        return redirect('test_cases:test_suite_list')
+
+    # Filter by project
+    project_id = request.GET.get('project')
+    if project_id:
+        user_epics = Epic.objects.filter(project_id=project_id, project__created_by=request.user)
+        user_stories = UserStory.objects.filter(epic__in=user_epics)
+        user_testcases = TestCase.objects.filter(user_story__in=user_stories)
+        test_suites = test_suites.filter(test_cases__in=user_testcases).distinct()
+
+    # Search functionality
+    search_query = request.GET.get('search', '')
+    if search_query:
+        test_suites = test_suites.filter(
+            Q(name__icontains=search_query) |
+            Q(description__icontains=search_query)
+        )
+    
+    # Sort functionality
+    sort_by = request.GET.get('sort', 'created_date')
+    order = request.GET.get('order', 'desc') # default to descending
+
+    # Define valid sortable fields
+    valid_sort_fields = ['name', 'created_date']
+    if sort_by == 'test_cases_count': # Special case for annotations
+        test_suites = test_suites.annotate(test_cases_count=models.Count('test_cases'))
+        valid_sort_fields.append('test_cases_count')
+    
+    if sort_by in valid_sort_fields:
+        if order == 'desc':
+            test_suites = test_suites.order_by(f'-{sort_by}')
+        else:
+            test_suites = test_suites.order_by(sort_by)
+    else: # Default sort
+        test_suites = test_suites.order_by('-created_date')
+
+
+    # Pagination
+    paginator = Paginator(test_suites, 10)
+    page_number = request.GET.get('page')
+    test_suites = paginator.get_page(page_number)
+
+    # Get projects for filter
+    projects = Project.objects.filter(created_by=request.user)
+
+    context = {
+        'test_suites': test_suites,
+        'projects': projects,
+        'selected_project': project_id,
+        'search_query': search_query,
+    }
+    return render(request, 'test_suites/list.html', context)
+
+
+@login_required
+def test_suite_create(request):
+    if request.method == 'POST':
+        form = TestSuiteForm(request.POST, user=request.user)
+        if form.is_valid():
+            test_suite = form.save(commit=False)
+            test_suite.created_by = request.user
+            test_suite.save()
+            form.save_m2m()
+            messages.success(request, 'Test Suite created successfully!')
+            return redirect('test_cases:test_suite_list')
+    else:
+        form = TestSuiteForm(user=request.user)
+
+    return render(request, 'test_suites/form.html', {
+        'form': form,
+        'title': 'Create Test Suite',
+        'action': 'Create'
+    })
+
+
+@login_required
+def test_suite_edit(request, pk):
+    test_suite = get_object_or_404(TestSuite, pk=pk, created_by=request.user)
+
+    if request.method == 'POST':
+        form = TestSuiteForm(request.POST, instance=test_suite, user=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Test Suite updated successfully!')
+            return redirect('test_cases:test_suite_list')
+    else:
+        form = TestSuiteForm(instance=test_suite, user=request.user)
+
+    return render(request, 'test_suites/form.html', {
+        'form': form,
+        'title': 'Edit Test Suite',
+        'action': 'Update',
+        'test_suite': test_suite
+    })
+
+
+@login_required
+def test_suite_delete(request, pk):
+    test_suite = get_object_or_404(TestSuite, pk=pk, created_by=request.user)
+
+    if request.method == 'POST':
+        suite_name = test_suite.name
+        test_suite.delete()
+        messages.success(request, f'Test Suite "{suite_name}" deleted successfully!')
+        return redirect('test_cases:test_suite_list')
+
+    return render(request, 'test_suites/confirm_delete.html', {'test_suite': test_suite})
+
+
+# Additional AJAX Views
+@login_required
+def get_test_cases_by_filters(request):
+    project_id = request.GET.get('project_id')
+    epic_id = request.GET.get('epic_id')
+    story_id = request.GET.get('story_id')
+
+    testcases = TestCase.objects.filter(user_story__epic__project__created_by=request.user)
+
+    if project_id:
+        testcases = testcases.filter(user_story__epic__project_id=project_id)
+    if epic_id:
+        testcases = testcases.filter(user_story__epic_id=epic_id)
+    if story_id:
+        testcases = testcases.filter(user_story_id=story_id)
+
+    data = [{
+        'id': tc.id,
+        'name': tc.name,
+        'priority': tc.priority,
+        'status': tc.status
+    } for tc in testcases]
+    return JsonResponse(data, safe=False)
+
+
+@login_required
+def get_execution_stats(request):
+    test_run_id = request.GET.get('test_run_id')
+    if not test_run_id:
+        return JsonResponse({'error': 'Test run ID required'}, status=400)
+
+    test_run = get_object_or_404(TestRun, pk=test_run_id, created_by=request.user)
+    summary = test_run.get_execution_summary()
+
+    return JsonResponse(summary)
+
+
+@login_required
+def test_suite_stats(request):
+    """AJAX endpoint for test suite statistics"""
+    if not request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'error': 'Invalid request'}, status=400)
+    
+    test_suites = TestSuite.objects.filter(created_by=request.user)
+    
+    suites_data = []
+    for suite in test_suites:
+        stats = suite.get_test_case_statistics()
+        suites_data.append({
+            'id': suite.id,
+            'name': suite.name,
+            'stats': stats,
+            'stats_html': render_to_string('test_suites/stats_badges.html', {
+                'suite_stats': stats
+            }, request=request)
+        })
+    
+    return JsonResponse({'suites': suites_data})
+
+
+@login_required
+def test_run_create_from_suite(request):
+    """AJAX endpoint to create test run from suite"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    suite_id = request.POST.get('suite_id')
+    test_run_name = request.POST.get('test_run_name')
+    test_run_description = request.POST.get('test_run_description', '')
+    
+    if not suite_id or not test_run_name:
+        return JsonResponse({'error': 'Missing required fields'}, status=400)
+    
+    try:
+        suite = TestSuite.objects.get(id=suite_id, created_by=request.user)
+        
+        # Create test run
+        test_run = TestRun.objects.create(
+            name=test_run_name,
+            description=test_run_description,
+            created_by=request.user
+        )
+        
+        # Create test executions for all test cases in suite
+        executions = []
+        for test_case in suite.test_cases.all():
+            execution = TestExecution.objects.create(
+                testcase=test_case,
+                test_run=test_run,
+                executor=request.user # Set executor to the user creating the run
+            )
+            executions.append(execution)
+        
+        return JsonResponse({
+            'success': True,
+            'test_run_id': test_run.id,
+            'redirect_url': reverse('test_cases:test_run_execute', args=[test_run.id])
+        })
+        
+    except TestSuite.DoesNotExist:
+        return JsonResponse({'error': 'Test suite not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

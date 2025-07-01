@@ -1,2 +1,2 @@
 # Command to run when "Run" button clicked
-run_command: 'python manage.py runserver 0.0.0.0:8000'
+run_command: 'python manage.py runserver 0.0.0.0:8001'

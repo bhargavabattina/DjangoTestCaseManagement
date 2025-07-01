@@ -535,15 +535,15 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Chart instances
+    let trendsChart, statusChart;
+
     // Initialize components
     initializeCharts();
     initializeFilters();
     initializeTable();
     loadSummaryData();
     loadProjectBreakdown();
-    
-    // Chart instances
-    let trendsChart, statusChart;
     
     function initializeCharts() {
         // Trends Chart
@@ -616,6 +616,95 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
+    }
+
+    function updateCharts(data) {
+        // Update trends chart
+        if (trendsChart && data.trends) {
+            trendsChart.data.labels = data.trends.labels;
+            trendsChart.data.datasets[0].data = data.trends.total;
+            trendsChart.data.datasets[1].data = data.trends.passed;
+            trendsChart.data.datasets[2].data = data.trends.failed;
+            trendsChart.update();
+        }
+        
+        // Update status chart
+        if (statusChart && data.status_distribution) {
+            statusChart.data.datasets[0].data = [
+                data.status_distribution.passed || 0,
+                data.status_distribution.failed || 0,
+                data.status_distribution.skipped || 0,
+                data.status_distribution.blocked || 0,
+                data.status_distribution.in_progress || 0,
+                data.status_distribution.not_executed || 0
+            ];
+            statusChart.update();
+        }
+    }
+    
+    function loadExecutionDetails(executionId) {
+        fetch(`{% url 'test_cases:test_execution_detail_ajax' 0 %}`.replace('0', executionId))
+            .then(response => response.json())
+            .then(data => {
+                const content = document.getElementById('drill-down-content');
+                content.innerHTML = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Test Case Information</h6>
+                            <table class="table table-sm">
+                                <tr><td><strong>Name:</strong></td><td>${data.testcase_name}</td></tr>
+                                <tr><td><strong>Priority:</strong></td><td><span class="badge bg-${data.priority_color}">${data.priority}</span></td></tr>
+                                <tr><td><strong>User Story:</strong></td><td>${data.user_story}</td></tr>
+                                <tr><td><strong>Project:</strong></td><td>${data.project}</td></tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Execution Information</h6>
+                            <table class="table table-sm">
+                                <tr><td><strong>Status:</strong></td><td><span class="badge bg-${data.status_color}">${data.status}</span></td></tr>
+                                <tr><td><strong>Executor:</strong></td><td>${data.executor || 'Unassigned'}</td></tr>
+                                <tr><td><strong>Date:</strong></td><td>${data.execution_date || 'Not executed'}</td></tr>
+                                <tr><td><strong>Duration:</strong></td><td>${data.execution_time || 'N/A'}</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <h6>Comments</h6>
+                        <p class="text-muted">${data.comments || 'No comments'}</p>
+                    </div>
+                    <div class="mt-3">
+                        <h6>Test Steps</h6>
+                        <div class="accordion" id="stepsAccordion">
+                            ${data.steps.map((step, index) => `
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#step${index}">
+                                            Step ${step.number}: ${step.description.substring(0, 50)}...
+                                            <span class="badge bg-${step.status_color} ms-2">${step.status}</span>
+                                        </button>
+                                    </h2>
+                                    <div id="step${index}" class="accordion-collapse collapse">
+                                        <div class="accordion-body">
+                                            <p><strong>Expected:</strong> ${step.expected_result}</p>
+                                            <p><strong>Actual:</strong> ${step.actual_result || 'Not provided'}</p>
+                                            ${step.comments ? `<p><strong>Comments:</strong> ${step.comments}</p>` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('view-full-execution').href = `{% url 'test_cases:test_execution_detail' 0 %}`.replace('0', executionId);
+                
+                const modal = new bootstrap.Modal(document.getElementById('drillDownModal'));
+                modal.show();
+            })
+            .catch(error => {
+                console.error('Error loading execution details:', error);
+                alert('Error loading execution details');
+            });
     }
     
     function initializeFilters() {
@@ -700,3 +789,199 @@ document.addEventListener('DOMContentLoaded', function() {
         
         for (let [key, value] of formData.entries()) {
             if (value && key !== 'csrfmiddlewaretoken') {
+                switch (key) {
+                    case 'date_from':
+                        filters.push(`From: ${value}`);
+                        break;
+                    case 'date_to':
+                        filters.push(`To: ${value}`);
+                        break;
+                    case 'project':
+                        const projectSelect = document.querySelector('[name="project"]');
+                        const projectText = projectSelect.options[projectSelect.selectedIndex].text;
+                        filters.push(`Project: ${projectText}`);
+                        break;
+                    case 'epic':
+                        const epicSelect = document.querySelector('[name="epic"]');
+                        const epicText = epicSelect.options[epicSelect.selectedIndex].text;
+                        filters.push(`Epic: ${epicText}`);
+                        break;
+                    case 'status':
+                        filters.push(`Status: ${value.charAt(0).toUpperCase() + value.slice(1)}`);
+                        break;
+                    case 'executor':
+                        const executorSelect = document.querySelector('[name="executor"]');
+                        const executorText = executorSelect.options[executorSelect.selectedIndex].text;
+                        filters.push(`Executor: ${executorText}`);
+                        break;
+                    case 'priority':
+                        filters.push(`Priority: ${value.charAt(0).toUpperCase() + value.slice(1)}`);
+                        break;
+                }
+            }
+        }
+        
+        const summary = document.getElementById('filter-summary');
+        if (filters.length > 0) {
+            summary.textContent = `Active filters: ${filters.join(', ')}`;
+        } else {
+            summary.textContent = 'No filters applied';
+        }
+    }
+
+    function initializeTable() {
+        // Select all checkbox functionality
+        document.getElementById('select-all-executions').addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.execution-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+        });
+        
+        // Sort functionality
+        document.querySelectorAll('.sortable').forEach(header => {
+            header.addEventListener('click', function() {
+                const sortBy = this.dataset.sort;
+                const currentUrl = new URL(window.location);
+                const currentSort = currentUrl.searchParams.get('sort');
+                
+                if (currentSort === sortBy) {
+                    currentUrl.searchParams.set('sort', `-${sortBy}`);
+                } else {
+                    currentUrl.searchParams.set('sort', sortBy);
+                }
+                
+                window.location.href = currentUrl.toString();
+            });
+        });
+        
+        // Drill down functionality
+        document.querySelectorAll('.drill-down-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const executionId = this.dataset.executionId;
+                loadExecutionDetails(executionId);
+            });
+        });
+        
+        // Column toggle functionality
+        document.getElementById('toggle-columns').addEventListener('click', function() {
+            const modal = new bootstrap.Modal(document.getElementById('columnModal'));
+            modal.show();
+        });
+        
+        document.getElementById('apply-column-settings').addEventListener('click', function() {
+            const checkboxes = document.querySelectorAll('.column-checkbox');
+            checkboxes.forEach(checkbox => {
+                const column = checkbox.dataset.column;
+                const columns = document.querySelectorAll(`[data-column="${column}"]`);
+                columns.forEach(col => {
+                    col.style.display = checkbox.checked ? '' : 'none';
+                });
+            });
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('columnModal'));
+            modal.hide();
+        });
+    }
+
+    function loadSummaryData() {
+        const currentParams = new URLSearchParams(window.location.search);
+        
+        fetch(`{% url 'test_cases:test_execution_summary_data' %}?${currentParams.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('passed-executions').textContent = data.passed_count || 0;
+                document.getElementById('failed-executions').textContent = data.failed_count || 0;
+                document.getElementById('pass-rate').textContent = `${data.pass_rate || 0}%`;
+                document.getElementById('avg-execution-time').textContent = `${data.avg_execution_time || 0} min`;
+                document.getElementById('total-execution-time').textContent = `${data.total_execution_time || 0} min`;
+                document.getElementById('unique-executors').textContent = data.unique_executors || 0;
+                document.getElementById('date-range').textContent = data.date_range || 'All Time';
+                
+                // Update charts
+                updateCharts(data);
+            })
+            .catch(error => {
+                console.error('Error loading summary data:', error);
+            });
+    }
+
+    function loadProjectBreakdown() {
+        const currentParams = new URLSearchParams(window.location.search);
+        
+        fetch(`{% url 'test_cases:test_execution_project_breakdown' %}?${currentParams.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.querySelector('#project-breakdown-table tbody');
+                tbody.innerHTML = '';
+                
+                data.projects.forEach(project => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><strong>${project.name}</strong></td>
+                        <td><span class="badge bg-primary">${project.total_executions}</span></td>
+                        <td>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-success" style="width: ${project.pass_rate}%">${project.pass_rate}%</div>
+                            </div>
+                        </td>
+                        <td>${project.avg_time} min</td>
+                        <td>${project.last_execution || 'Never'}</td>
+                        <td>
+                            <a href="{% url 'test_cases:test_execution_report' %}?project=${project.id}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-filter"></i> Filter
+                            </a>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading project breakdown:', error);
+            });
+    }
+
+    // Export functionality
+    document.getElementById('export-excel').addEventListener('click', function(e) {
+        e.preventDefault();
+        const currentParams = new URLSearchParams(window.location.search);
+        window.location.href = `{% url 'test_cases:test_execution_export' %}?${currentParams.toString()}`;
+    });
+    
+    document.getElementById('export-pdf').addEventListener('click', function(e) {
+        e.preventDefault();
+        window.print();
+    });
+    
+    document.getElementById('export-chart').addEventListener('click', function(e) {
+        e.preventDefault();
+        const canvas = document.getElementById('statusChart');
+        const link = document.createElement('a');
+        link.download = 'execution-status-chart.png';
+        link.href = canvas.toDataURL();
+        link.click();
+    });
+    
+    document.getElementById('print-report').addEventListener('click', function() {
+        window.print();
+    });
+
+    // Save filter functionality
+    document.getElementById('save-filter').addEventListener('click', function() {
+        const filterName = prompt('Enter a name for this filter:');
+        if (filterName) {
+            const formData = new FormData(document.getElementById('report-filter-form'));
+            const filterData = {};
+            for (let [key, value] of formData.entries()) {
+                if (value && key !== 'csrfmiddlewaretoken') {
+                    filterData[key] = value;
+                }
+            }
+            
+            localStorage.setItem(`reportFilter_${filterName}`, JSON.stringify(filterData));
+            alert(`Filter "${filterName}" saved successfully!`);
+        }
+    });
+});
+</script>
+{% endblock %}
