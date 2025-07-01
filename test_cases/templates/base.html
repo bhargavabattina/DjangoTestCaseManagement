@@ -215,6 +215,30 @@
                     Import Excel
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link {% block nav_test_runs %}{% endblock %}" href="{% url 'test_cases:test_run_list' %}">
+                    <i class="fas fa-play-circle"></i>
+                    Test Runs
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% block nav_test_suites %}{% endblock %}" href="{% url 'test_cases:test_suite_list' %}">
+                    <i class="fas fa-tasks"></i>
+                    Test Suites
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% block nav_test_execution %}{% endblock %}" href="{% url 'test_cases:test_execution_dashboard' %}">
+                    <i class="fas fa-chart-line"></i>
+                    Test Execution
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% block nav_execution_reports %}{% endblock %}" href="{% url 'test_cases:test_execution_report' %}">
+                    <i class="fas fa-file-alt"></i>
+                    Execution Reports
+                </a>
+            </li>
         </ul>
         
         {% if user.is_authenticated %}
