@@ -12,6 +12,10 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,12 +25,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-pxau8-zo*k^o(6-r!lu8tf8no&bca$fgfhg1p4o3c%_8xx9wne"
+SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-pxau8-zo*k^o(6-r!lu8tf8no&bca$fgfhg1p4o3c%_8xx9wne")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
 
-ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1']
+# Allow all subdomains of clackypaas.com using the wildcard pattern
+allowed_hosts_default = "localhost,127.0.0.1,.clackypaas.com"
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", allowed_hosts_default).split(",")
 
 
 # Application definition
@@ -76,8 +82,17 @@ WSGI_APPLICATION = "testcase_management.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": os.environ.get("DB_NAME", "testcase_management"),
+        "USER": os.environ.get("DB_USER", "root"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+        "HOST": os.environ.get("DB_HOST", "127.0.0.1"),
+        "PORT": os.environ.get("DB_PORT", "3306"),
+        "OPTIONS": {
+            "charset": os.environ.get("DB_CHARSET", "utf8mb4"),
+            "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
+        "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", 600)),
     }
 }
 
@@ -120,6 +135,7 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Media files (uploads)
 MEDIA_URL = "media/"

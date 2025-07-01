@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: testcase_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: hXLujfuQ
+      MYSQL_DATABASE: testcase_management
+      MYSQL_USER: testcase_user
+      MYSQL_PASSWORD: hXLujfuQ
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      timeout: 20s
+      retries: 10
+      interval: 30s
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+  web:
+    build: .
+    container_name: testcase_web
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - ./static:/app/static
+      - ./media:/app/media
+    environment:
+      - DEBUG=True
+      - DB_HOST=mysql
+      - DB_NAME=testcase_management
+      - DB_USER=root
+      - DB_PASSWORD=hXLujfuQ
+      - DB_PORT=3306
+      - SECRET_KEY=django-insecure-docker-development-key
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      timeout: 10s
+      retries: 5
+      interval: 30s
+    command: python manage.py runserver 0.0.0.0:8000
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  default:
+    driver: bridge
