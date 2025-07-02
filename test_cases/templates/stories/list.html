@@ -371,8 +371,20 @@
                             <p><strong>Story Points:</strong> {{ story.story_points|default:"Not specified" }}</p>
                         </div>
                         <div class="col-md-6">
-                            <p><strong>Assigned To:</strong> {{ story.assigned_to.get_full_name|default:story.assigned_to.username|default:"Unassigned" }}</p>
-                            <p><strong>Created By:</strong> {{ story.created_by.get_full_name|default:story.created_by.username }}</p>
+                            <p><strong>Assigned To:</strong>
+                                {% if story.assigned_to %}
+                                    {{ story.assigned_to.get_full_name|default:story.assigned_to.username }}
+                                {% else %}
+                                    Unassigned
+                                {% endif %}
+                            </p>
+                            <p><strong>Created By:</strong>
+                                {% if story.created_by %}
+                                    {{ story.created_by.get_full_name|default:story.created_by.username }}
+                                {% else %}
+                                    Unknown
+                                {% endif %}
+                            </p>
                             <p><strong>Created Date:</strong> {{ story.created_date|date:"F j, Y, g:i a" }}</p>
                         </div>
                     </div>

@@ -85,8 +85,8 @@ DATABASES = {
         "ENGINE": "django.db.backends.mysql",
         "NAME": os.environ.get("DB_NAME", "testcase_management"),
         "USER": os.environ.get("DB_USER", "root"),
-        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
-        "HOST": os.environ.get("DB_HOST", "127.0.0.1"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", "root"),
+        "HOST": os.environ.get("DB_HOST", "localhost"),
         "PORT": os.environ.get("DB_PORT", "3306"),
         "OPTIONS": {
             "charset": os.environ.get("DB_CHARSET", "utf8mb4"),
@@ -95,6 +95,8 @@ DATABASES = {
         "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", 600)),
     }
 }
+
+
 
 
 # Password validation

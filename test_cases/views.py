@@ -361,6 +361,9 @@ def story_create(request):
     })
 
 
+
+
+
 @login_required
 def story_edit(request, pk):
     story = get_object_or_404(UserStory, pk=pk, epic__project__created_by=request.user)
@@ -441,7 +444,6 @@ def testcase_list(request):
         'selected_project': project_id,
         'selected_epic': epic_id,
         'selected_story': story_id,
-        'search_query': search_query,
     }
     return render(request, 'testcases/list.html', context)
 
@@ -451,11 +453,21 @@ def testcase_create(request):
     if request.method == 'POST':
         form = TestCaseForm(request.POST, user=request.user)
         if form.is_valid():
-            testcase = form.save(commit=False)
-            testcase.created_by = request.user
-            testcase.save()
-            messages.success(request, 'Test Case created successfully!')
-            return redirect('test_cases:testcase_list')
+            try:
+                testcase = form.save(commit=False)
+                testcase.created_by = request.user
+                # Ensure the user_story is set from the form
+                testcase.user_story = form.cleaned_data.get('user_story')
+                testcase.save()
+                messages.success(request, 'Test Case created successfully!')
+                return redirect('test_cases:testcase_list')
+            except Exception as e:
+                messages.error(request, f'Error creating test case: {str(e)}')
+        else:
+            # Add form errors to messages
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field.title()}: {error}")
     else:
         form = TestCaseForm(user=request.user)
 
@@ -473,9 +485,20 @@ def testcase_edit(request, pk):
     if request.method == 'POST':
         form = TestCaseForm(request.POST, instance=testcase, user=request.user)
         if form.is_valid():
-            form.save()
-            messages.success(request, 'Test Case updated successfully!')
-            return redirect('test_cases:testcase_list')
+            try:
+                testcase = form.save(commit=False)
+                # Ensure the user_story is set from the form
+                testcase.user_story = form.cleaned_data.get('user_story')
+                testcase.save()
+                messages.success(request, 'Test Case updated successfully!')
+                return redirect('test_cases:testcase_list')
+            except Exception as e:
+                messages.error(request, f'Error updating test case: {str(e)}')
+        else:
+            # Add form errors to messages
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field.title()}: {error}")
     else:
         form = TestCaseForm(instance=testcase, user=request.user)
 
@@ -633,43 +656,87 @@ def test_run_list(request):
 @login_required
 def test_run_create(request):
     if request.method == 'POST':
-        form = TestRunForm(request.POST)
+        form = TestRunForm(request.POST, user=request.user)
         if form.is_valid():
-            test_run = form.save(commit=False)
-            test_run.created_by = request.user
-            test_run.save()
-            messages.success(request, 'Test Run created successfully!')
-            return redirect('test_cases:test_run_list')
+            try:
+                test_run = form.save(commit=False)
+                test_run.created_by = request.user
+                test_run.save()
+                # Create TestExecution objects for selected test cases
+                test_case_ids = form.cleaned_data['test_cases']
+                for test_case in TestCase.objects.filter(id__in=test_case_ids, user_story__epic__project__created_by=request.user):
+                    TestExecution.objects.create(
+                        testcase=test_case,
+                        test_run=test_run,
+                        status='not_executed',
+                        executor=None,
+                        execution_date=None
+                    )
+                messages.success(request, 'Test Run created successfully!')
+                return redirect('test_cases:test_run_list')
+            except Exception as e:
+                messages.error(request, f'Error creating test run: {str(e)}')
+        else:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field.title()}: {error}")
     else:
-        form = TestRunForm()
-
+        form = TestRunForm(user=request.user)
     return render(request, 'test_runs/form.html', {
         'form': form,
         'title': 'Create Test Run',
-        'action': 'Create'
+        'action': 'Create',
+        'projects': Project.objects.filter(created_by=request.user)
     })
 
 
 @login_required
 def test_run_edit(request, pk):
     test_run = get_object_or_404(TestRun, pk=pk, created_by=request.user)
-
     if request.method == 'POST':
-        form = TestRunForm(request.POST, instance=test_run)
+        form = TestRunForm(request.POST, instance=test_run, user=request.user)
         if form.is_valid():
-            form.save()
-            messages.success(request, 'Test Run updated successfully!')
-            return redirect('test_cases:test_run_list')
-    else:
-        form = TestRunForm(instance=test_run)
+            try:
+                test_run = form.save()
+                # Update TestExecution objects if test cases change
+                test_case_ids = form.cleaned_data['test_cases']
+                existing_executions = test_run.test_executions.all()
+                existing_test_case_ids = set(te.testcase_id for te in existing_executions)
+                new_test_case_ids = set(test_case.id for test_case in test_case_ids)
 
+                # Remove executions for test cases no longer selected
+                for execution in existing_executions:
+                    if execution.testcase_id not in new_test_case_ids:
+                        execution.delete()
+
+                # Add executions for new test cases
+                for test_case in test_case_ids:
+                    if test_case.id not in existing_test_case_ids:
+                        TestExecution.objects.create(
+                            testcase=test_case,
+                            test_run=test_run,
+                            status='not_executed',
+                            executor=None,
+                            execution_date=None
+                        )
+
+                messages.success(request, 'Test Run updated successfully!')
+                return redirect('test_cases:test_run_list')
+            except Exception as e:
+                messages.error(request, f'Error updating test run: {str(e)}')
+        else:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field.title()}: {error}")
+    else:
+        form = TestRunForm(instance=test_run, user=request.user)
     return render(request, 'test_runs/form.html', {
         'form': form,
         'title': 'Edit Test Run',
         'action': 'Update',
-        'test_run': test_run
+        'test_run': test_run,
+        'projects': Project.objects.filter(created_by=request.user)
     })
-
 
 @login_required
 def test_run_delete(request, pk):
@@ -704,7 +771,8 @@ def test_run_create_from_suite(request):
         test_run = TestRun.objects.create(
             name=test_run_name,
             description=test_run_description,
-            created_by=request.user
+            created_by=request.user,
+            status='not_started'
         )
 
         # Create test executions for all test cases in suite
@@ -713,7 +781,8 @@ def test_run_create_from_suite(request):
             execution = TestExecution.objects.create(
                 testcase=test_case,
                 test_run=test_run,
-                executor=request.user
+                status='not_executed',
+                executor=None
             )
             executions.append(execution)
 
@@ -727,7 +796,6 @@ def test_run_create_from_suite(request):
         return JsonResponse({'error': 'Test suite not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-
 
 @login_required
 def test_run_execute(request, pk):
@@ -1299,11 +1367,13 @@ def get_test_cases_by_filters(request):
     data = [{
         'id': tc.id,
         'name': tc.name,
+        'description': tc.description or '',
         'priority': tc.priority,
-        'status': tc.status
+        'status': tc.status,
+        'is_automated': tc.is_automated,
+        'user_story_name': tc.user_story.name
     } for tc in testcases]
     return JsonResponse(data, safe=False)
-
 
 @login_required
 def get_execution_stats(request):

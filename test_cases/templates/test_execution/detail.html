@@ -563,20 +563,42 @@ document.addEventListener('DOMContentLoaded', function() {
         // Delete step functionality
         document.querySelectorAll('.delete-step').forEach(btn => {
             btn.addEventListener('click', function() {
-                if (confirm('Are you sure you want to delete this step?')) {
-                    this.closest('.execution-step').remove();
+                const stepId = this.getAttribute('data-step-id');
+                if (stepId.startsWith('new-')) {
+                    if (confirm('Are you sure you want to delete this step?')) {
+                        this.closest('.execution-step').remove();
+                    }
+                } else {
+                    fetch(`/test-executions/steps/${stepId}/delete/`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                            'Content-Type': 'application/json'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            this.closest('.execution-step').remove();
+                        } else {
+                            alert('Error deleting step: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        alert('Error deleting step: ' + error);
+                    });
                 }
             });
         });
-        
+
         // Status change functionality
         document.querySelectorAll('.step-status-select').forEach(select => {
             select.addEventListener('change', function() {
                 const statusBadge = this.closest('.execution-step').querySelector('.step-status .badge');
                 const status = this.value;
-                
+
                 statusBadge.className = 'badge bg-secondary';
-                
+
                 if (status === 'passed') {
                     statusBadge.className = 'badge bg-success';
                     statusBadge.textContent = 'Passed';
@@ -593,10 +615,10 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
-    
+
     // Initialize step events
     bindStepEvents();
-    
+
     // Expand/collapse all steps
     document.getElementById('expand-all-steps').addEventListener('click', function() {
         document.querySelectorAll('.execution-step .collapse').forEach(collapse => {
@@ -607,43 +629,43 @@ document.addEventListener('DOMContentLoaded', function() {
             icon.classList.add('fa-chevron-up');
         });
     });
-    
+
     // Quick actions
     document.getElementById('quick-pass').addEventListener('click', function() {
         document.getElementById('{{ form.status.id_for_label }}').value = 'passed';
         saveExecution();
     });
-    
+
     document.getElementById('quick-fail').addEventListener('click', function() {
         document.getElementById('{{ form.status.id_for_label }}').value = 'failed';
         saveExecution();
     });
-    
+
     document.getElementById('quick-skip').addEventListener('click', function() {
         document.getElementById('{{ form.status.id_for_label }}').value = 'skipped';
         saveExecution();
     });
-    
+
     // File upload functionality
     const fileInput = document.getElementById('file-input');
     const uploadModal = new bootstrap.Modal(document.getElementById('uploadModal'));
-    
+
     document.getElementById('upload-attachment-btn').addEventListener('click', function() {
         uploadModal.show();
     });
-    
+
     document.getElementById('select-files-btn').addEventListener('click', function() {
         fileInput.click();
     });
-    
+
     fileInput.addEventListener('change', function() {
         displaySelectedFiles(this.files);
     });
-    
+
     function displaySelectedFiles(files) {
         const container = document.getElementById('selected-files');
         container.innerHTML = '';
-        
+
         Array.from(files).forEach(file => {
             const fileDiv = document.createElement('div');
             fileDiv.className = 'border rounded p-2 mb-2 d-flex justify-content-between align-items-center';
@@ -659,10 +681,10 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
             container.appendChild(fileDiv);
         });
-        
+
         document.getElementById('upload-files-btn').disabled = files.length === 0;
     }
-    
+
     // Save execution
     function saveExecution() {
         const formData = new FormData();
@@ -671,12 +693,78 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('comments', document.getElementById('{{ form.comments.id_for_label }}').value);
         formData.append('notes', document.getElementById('{{ form.notes.id_for_label }}').value);
         formData.append('execution_time_minutes', document.getElementById('{{ form.execution_time_minutes.id_for_label }}').value);
-        
+
         // Collect step data
         const steps = [];
         document.querySelectorAll('.execution-step').forEach((step, index) => {
-            const stepData = {
+            const stepId = step.getAttribute('data-step-id');
+            steps.push({
+                id: stepId.startsWith('new-') ? null : stepId,
                 step_number: index + 1,
                 step_description: step.querySelector('.step-description').value,
                 expected_result: step.querySelector('.step-expected').value,
-                actual_result: step.querySelector('.step
+                actual_result: step.querySelector('.step-actual').value,
+                status: step.querySelector('.step-status-select').value,
+                comments: step.querySelector('.step-comments').value
+            });
+        });
+        formData.append('steps', JSON.stringify(steps));
+
+        // Send AJAX request to save execution
+        fetch('{% url "test_cases:test_execution_record" execution.id %}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Execution saved successfully!');
+                window.location.reload(); // Reload to update step IDs and reflect changes
+            } else {
+                alert('Error saving execution: ' + (data.errors || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            alert('Error saving execution: ' + error);
+        });
+    }
+
+    document.getElementById('save-execution-btn').addEventListener('click', saveExecution);
+
+    // File upload handling
+    document.getElementById('upload-files-btn').addEventListener('click', function() {
+        const files = fileInput.files;
+        if (files.length === 0) return;
+
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        Array.from(files).forEach(file => {
+            formData.append('files', file);
+        });
+
+        const progressBar = document.querySelector('#upload-progress .progress-bar');
+        progressBar.parentElement.style.display = 'block';
+
+        fetch('/test-executions/{{ execution.id }}/upload/', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Files uploaded successfully!');
+                uploadModal.hide();
+                // Optionally reload or update attachments container
+            } else {
+                alert('Error uploading files: ' + data.error);
+            }
+            progressBar.parentElement.style.display = 'none';
+        })
+        .catch(error => {
+            alert('Error uploading files: ' + error);
+            progressBar.parentElement.style.display = 'none';
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -1,7 +1,628 @@
+{% extends "base.html" %}
+
+{% block title %}Test Cases - Test Case Management{% endblock %}
+
+{% block nav_testcases %}active{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'test_cases:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Test Cases</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Test Cases</h1>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-secondary" id="bulk-actions-btn" style="display: none;">
+            <i class="fas fa-cogs"></i> Bulk Actions
+        </button>
+        <button type="button" class="btn btn-outline-success" id="export-btn">
+            <i class="fas fa-file-excel"></i> Export Excel
+        </button>
+        <a href="{% url 'test_cases:testcase_import' %}" class="btn btn-outline-info">
+            <i class="fas fa-file-import"></i> Import Excel
+        </a>
+        <a href="{% url 'test_cases:testcase_create' %}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> New Test Case
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Search and Filter Section -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-2">
+                <label for="project" class="form-label">Filter by Project</label>
+                <select name="project" id="project" class="form-control">
+                    <option value="">All Projects</option>
+                    {% for project in projects %}
+                        <option value="{{ project.id }}" {% if selected_project == project.id|stringformat:"s" %}selected{% endif %}>
+                            {{ project.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="epic" class="form-label">Filter by Epic</label>
+                <select name="epic" id="epic" class="form-control">
+                    <option value="">All Epics</option>
+                    {% for epic in epics %}
+                        <option value="{{ epic.id }}" 
+                                data-project="{{ epic.project.id }}"
+                                {% if selected_epic == epic.id|stringformat:"s" %}selected{% endif %}>
+                            {{ epic.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="story" class="form-label">Filter by User Story</label>
+                <select name="story" id="story" class="form-control">
+                    <option value="">All User Stories</option>
+                    {% for story in stories %}
+                        <option value="{{ story.id }}" 
+                                data-epic="{{ story.epic.id }}"
+                                data-project="{{ story.epic.project.id }}"
+                                {% if selected_story == story.id|stringformat:"s" %}selected{% endif %}>
+                            {{ story.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="search" class="form-label">Search Test Cases</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" 
+                           class="form-control" 
+                           id="search" 
+                           name="search" 
+                           value="{{ search_query }}" 
+                           placeholder="Search by name, description or test steps...">
+                </div>
+            </div>
+            <div class="col-md-1 d-flex align-items-end">
+                <button type="submit" class="btn btn-outline-primary me-1">
+                    <i class="fas fa-search"></i>
+                </button>
+                <a href="{% url 'test_cases:testcase_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Bulk Actions Panel -->
+<div class="card mb-4" id="bulk-actions-panel" style="display: none;">
+    <div class="card-body">
+        <form id="bulk-actions-form">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-2">
+                    <label for="bulk-status" class="form-label">Change Status To</label>
+                    <select name="bulk-status" id="bulk-status" class="form-control">
+                        <option value="">Select Status...</option>
+                        <option value="draft">Draft</option>
+                        <option value="ready">Ready</option>
+                        <option value="blocked">Blocked</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="bulk-execution-status" class="form-label">Change Execution Status</label>
+                    <select name="bulk-execution-status" id="bulk-execution-status" class="form-control">
+                        <option value="">Select Status...</option>
+                        <option value="not_executed">Not Executed</option>
+                        <option value="passed">Passed</option>
+                        <option value="failed">Failed</option>
+                        <option value="skipped">Skipped</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="bulk-priority" class="form-label">Change Priority To</label>
+                    <select name="bulk-priority" id="bulk-priority" class="form-control">
+                        <option value="">Select Priority...</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="button" class="btn btn-success" id="apply-bulk-actions">
+                        <i class="fas fa-check"></i> Apply Changes
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="cancel-bulk-actions">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <span id="selected-count" class="text-muted">0 items selected</span>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Test Cases Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">All Test Cases</h5>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="select-all">
+                <label class="form-check-label" for="select-all">
+                    Select All
+                </label>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if testcases %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col" width="50">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="header-select-all">
+                                </div>
+                            </th>
+                            <th scope="col">Test Case Name</th>
+                            <th scope="col">Hierarchical Context</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Execution Status</th>
+                            <th scope="col">Priority</th>
+                            <th scope="col">Automated</th>
+                            <th scope="col">Assigned To</th>
+                            <th scope="col">Last Executed</th>
+                            <th scope="col" width="280">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for testcase in testcases %}
+                            <tr>
+                                <td>
+                                    <div class="form-check">
+                                        <input class="form-check-input testcase-checkbox" 
+                                               type="checkbox" 
+                                               value="{{ testcase.pk }}"
+                                               id="testcase-{{ testcase.pk }}">
+                                    </div>
+                                </td>
+                                <td>
+                                    <div>
+                                        <strong>{{ testcase.name }}</strong>
+                                        {% if testcase.description %}
+                                            <div class="text-muted small text-truncate" style="max-width: 200px;" title="{{ testcase.description }}">
+                                                {{ testcase.description }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-column gap-1">
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-project-diagram text-primary me-1"></i>
+                                            <span class="badge bg-primary small">{{ testcase.user_story.epic.project.name }}</span>
+                                        </div>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-layer-group text-success me-1"></i>
+                                            <span class="badge bg-success small">{{ testcase.user_story.epic.name }}</span>
+                                        </div>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-book-open text-info me-1"></i>
+                                            <span class="badge bg-info small">{{ testcase.user_story.name|truncatechars:20 }}</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if testcase.status == 'draft' %}secondary{% elif testcase.status == 'ready' %}success{% else %}warning{% endif %}">
+                                        {{ testcase.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if testcase.execution_status == 'not_executed' %}secondary{% elif testcase.execution_status == 'passed' %}success{% elif testcase.execution_status == 'failed' %}danger{% else %}warning{% endif %}">
+                                        {% if testcase.execution_status == 'passed' %}
+                                            <i class="fas fa-check"></i>
+                                        {% elif testcase.execution_status == 'failed' %}
+                                            <i class="fas fa-times"></i>
+                                        {% elif testcase.execution_status == 'skipped' %}
+                                            <i class="fas fa-forward"></i>
+                                        {% else %}
+                                            <i class="fas fa-clock"></i>
+                                        {% endif %}
+                                        {{ testcase.get_execution_status_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if testcase.priority == 'low' %}secondary{% elif testcase.priority == 'medium' %}info{% elif testcase.priority == 'high' %}warning{% else %}danger{% endif %}">
+                                        {% if testcase.priority == 'critical' %}
+                                            <i class="fas fa-exclamation-triangle"></i>
+                                        {% elif testcase.priority == 'high' %}
+                                            <i class="fas fa-arrow-up"></i>
+                                        {% elif testcase.priority == 'medium' %}
+                                            <i class="fas fa-minus"></i>
+                                        {% else %}
+                                            <i class="fas fa-arrow-down"></i>
+                                        {% endif %}
+                                        {{ testcase.get_priority_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if testcase.is_automated %}
+                                        <span class="badge bg-primary">
+                                            <i class="fas fa-robot"></i> Auto
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">
+                                            <i class="fas fa-user"></i> Manual
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if testcase.assigned_to %}
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-user text-info me-2"></i>
+                                            <small>{{ testcase.assigned_to.get_full_name|default:testcase.assigned_to.username }}</small>
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted small">Unassigned</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if testcase.last_executed %}
+                                        <small>{{ testcase.last_executed|date:"M d, Y H:i" }}</small>
+                                    {% else %}
+                                        <span class="text-muted small">Never</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{% url 'test_cases:testcase_edit' testcase.pk %}" 
+                                           class="btn btn-sm btn-outline-primary" 
+                                           title="Edit Test Case">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-success" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#viewModal{{ testcase.pk }}"
+                                                title="View Details">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-outline-info dropdown-toggle" 
+                                                    data-bs-toggle="dropdown" 
+                                                    title="Execute Test">
+                                                <i class="fas fa-play"></i>
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                <li>
+                                                    <form method="post" action="{% url 'test_cases:testcase_execute' testcase.pk %}">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="execution_status" value="passed">
+                                                        <button type="submit" class="dropdown-item text-success">
+                                                            <i class="fas fa-check"></i> Mark as Passed
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                                <li>
+                                                    <form method="post" action="{% url 'test_cases:testcase_execute' testcase.pk %}">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="execution_status" value="failed">
+                                                        <button type="submit" class="dropdown-item text-danger">
+                                                            <i class="fas fa-times"></i> Mark as Failed
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                                <li>
+                                                    <form method="post" action="{% url 'test_cases:testcase_execute' testcase.pk %}">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="execution_status" value="skipped">
+                                                        <button type="submit" class="dropdown-item text-warning">
+                                                            <i class="fas fa-forward"></i> Mark as Skipped
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-danger" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#deleteModal{{ testcase.pk }}"
+                                                title="Delete Test Case">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            {% if testcases.has_other_pages %}
+                <nav aria-label="Test Cases pagination" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        {% if testcases.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_epic %}&epic={{ selected_epic }}{% endif %}{% if selected_story %}&story={{ selected_story }}{% endif %}">
+                                    <i class="fas fa-angle-double-left"></i>
+                                </a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ testcases.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_epic %}&epic={{ selected_epic }}{% endif %}{% if selected_story %}&story={{ selected_story }}{% endif %}">
+                                    <i class="fas fa-angle-left"></i>
+                                </a>
+                            </li>
+                        {% endif %}
+                        
+                        {% for num in testcases.paginator.page_range %}
+                            {% if testcases.number == num %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ num }}</span>
+                                </li>
+                            {% elif num > testcases.number|add:'-3' and num < testcases.number|add:'3' %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_epic %}&epic={{ selected_epic }}{% endif %}{% if selected_story %}&story={{ selected_story }}{% endif %}">{{ num }}</a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if testcases.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ testcases.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_epic %}&epic={{ selected_epic }}{% endif %}{% if selected_story %}&story={{ selected_story }}{% endif %}">
+                                    <i class="fas fa-angle-right"></i>
+                                </a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ testcases.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if selected_project %}&project={{ selected_project }}{% endif %}{% if selected_epic %}&epic={{ selected_epic }}{% endif %}{% if selected_story %}&story={{ selected_story }}{% endif %}">
+                                    <i class="fas fa-angle-double-right"></i>
+                                </a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                
+                <div class="text-center text-muted small">
+                    Showing {{ testcases.start_index }} to {{ testcases.end_index }} of {{ testcases.paginator.count }} test cases
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-clipboard-check fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No Test Cases Found</h5>
+                {% if search_query or selected_project or selected_epic or selected_story %}
+                    <p class="text-muted">No test cases match your search criteria.</p>
+                    <a href="{% url 'test_cases:testcase_list' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-times"></i> Clear Filters
+                    </a>
+                {% else %}
+                    <p class="text-muted">Get started by creating your first test case or importing from Excel.</p>
+                    <div class="d-flex gap-2 justify-content-center">
+                        <a href="{% url 'test_cases:testcase_create' %}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Create Test Case
+                        </a>
+                        <a href="{% url 'test_cases:testcase_import' %}" class="btn btn-outline-info">
+                            <i class="fas fa-file-import"></i> Import from Excel
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- View Details Modals -->
+{% for testcase in testcases %}
+    <div class="modal fade" id="viewModal{{ testcase.pk }}" tabindex="-1" aria-labelledby="viewModalLabel{{ testcase.pk }}" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="viewModalLabel{{ testcase.pk }}">Test Case Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h6><strong>{{ testcase.name }}</strong></h6>
+                            <div class="mb-3">
+                                <strong>Hierarchical Path:</strong>
+                                <nav aria-label="breadcrumb">
+                                    <ol class="breadcrumb">
+                                        <li class="breadcrumb-item">{{ testcase.user_story.epic.project.name }}</li>
+                                        <li class="breadcrumb-item">{{ testcase.user_story.epic.name }}</li>
+                                        <li class="breadcrumb-item">{{ testcase.user_story.name }}</li>
+                                        <li class="breadcrumb-item active">{{ testcase.name }}</li>
+                                    </ol>
+                                </nav>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Status:</strong> 
+                                <span class="badge bg-{% if testcase.status == 'draft' %}secondary{% elif testcase.status == 'ready' %}success{% else %}warning{% endif %}">
+                                    {{ testcase.get_status_display }}
+                                </span>
+                            </p>
+                            <p><strong>Execution Status:</strong> 
+                                <span class="badge bg-{% if testcase.execution_status == 'not_executed' %}secondary{% elif testcase.execution_status == 'passed' %}success{% elif testcase.execution_status == 'failed' %}danger{% else %}warning{% endif %}">
+                                    {{ testcase.get_execution_status_display }}
+                                </span>
+                            </p>
+                            <p><strong>Priority:</strong> 
+                                <span class="badge bg-{% if testcase.priority == 'low' %}secondary{% elif testcase.priority == 'medium' %}info{% elif testcase.priority == 'high' %}warning{% else %}danger{% endif %}">
+                                    {{ testcase.get_priority_display }}
+                                </span>
+                            </p>
+                            <p><strong>Is Automated:</strong> 
+                                {% if testcase.is_automated %}
+                                    <span class="badge bg-primary"><i class="fas fa-robot"></i> Yes</span>
+                                {% else %}
+                                    <span class="badge bg-secondary"><i class="fas fa-user"></i> No</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Assigned To:</strong>
+                                {% if testcase.assigned_to %}
+                                    {{ testcase.assigned_to.get_full_name|default:testcase.assigned_to.username }}
+                                {% else %}
+                                    Unassigned
+                                {% endif %}
+                            </p>
+                            <p><strong>Created By:</strong>
+                                {% if testcase.created_by %}
+                                    {{ testcase.created_by.get_full_name|default:testcase.created_by.username }}
+                                {% else %}
+                                    Unknown
+                                {% endif %}
+                            </p>
+                            <p><strong>Created Date:</strong> {{ testcase.created_date|date:"F j, Y, g:i a" }}</p>
+                            <p><strong>Last Executed:</strong> {{ testcase.last_executed|date:"F j, Y, g:i a"|default:"Never" }}</p>
+                        </div>
+                    </div>
+                    {% if testcase.description %}
+                        <div class="mt-3">
+                            <strong>Description:</strong>
+                            <div class="p-3 bg-light rounded">{{ testcase.description|linebreaks }}</div>
+                        </div>
+                    {% endif %}
+                    <div class="mt-3">
+                        <strong>Test Steps:</strong>
+                        <div class="p-3 bg-light rounded">{{ testcase.test_steps|linebreaks }}</div>
+                    </div>
+                    <div class="mt-3">
+                        <strong>Expected Results:</strong>
+                        <div class="p-3 bg-light rounded">{{ testcase.expected_results|linebreaks }}</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <a href="{% url 'test_cases:testcase_edit' testcase.pk %}" class="btn btn-primary">
+                        <i class="fas fa-edit"></i> Edit Test Case
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endfor %}
+
+<!-- Delete Confirmation Modals -->
+{% for testcase in testcases %}
+    <div class="modal fade" id="deleteModal{{ testcase.pk }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ testcase.pk }}" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteModalLabel{{ testcase.pk }}">Delete Test Case</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete the test case <strong>"{{ testcase.name }}"</strong>?</p>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Warning:</strong> This action cannot be undone.
+                    </div>
+                    <div class="mt-3">
+                        <strong>Hierarchical Path:</strong>
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb">
+                                <li class="breadcrumb-item">{{ testcase.user_story.epic.project.name }}</li>
+                                <li class="breadcrumb-item">{{ testcase.user_story.epic.name }}</li>
+                                <li class="breadcrumb-item">{{ testcase.user_story.name }}</li>
+                                <li class="breadcrumb-item active">{{ testcase.name }}</li>
+                            </ol>
+                        </nav>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form method="post" action="{% url 'test_cases:testcase_delete' testcase.pk %}" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> Delete Test Case
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endfor %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-submit search form on Enter key
+    document.getElementById('search').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            this.form.submit();
+        }
+    });
+    
+    // Cascading dropdown filtering
+    document.getElementById('project').addEventListener('change', function() {
+        const selectedProject = this.value;
+        const epicSelect = document.getElementById('epic');
+        const storySelect = document.getElementById('story');
+        
+        // Filter epics based on selected project
+        Array.from(epicSelect.options).forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const projectId = option.getAttribute('data-project');
+                option.style.display = (!selectedProject || projectId === selectedProject) ? 'block' : 'none';
+            }
+        });
+        
+        // Filter stories based on selected project
+        Array.from(storySelect.options).forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const projectId = option.getAttribute('data-project');
+                option.style.display = (!selectedProject || projectId === selectedProject) ? 'block' : 'none';
+            }
+        });
+        
+        // Reset selections if they don't belong to selected project
+        if (selectedProject) {
+            if (epicSelect.value) {
+                const selectedEpicOption = epicSelect.options[epicSelect.selectedIndex];
+                const epicProjectId = selectedEpicOption.getAttribute('data-project');
+                if (epicProjectId !== selectedProject) {
+                    epicSelect.value = '';
+                }
+            }
+            if (storySelect.value) {
+                const selectedStoryOption = storySelect.options[storySelect.selectedIndex];
+                const storyProjectId = selectedStoryOption.getAttribute('data-project');
+                if (storyProjectId !== selectedProject) {
+                    storySelect.value = '';
+                }
+            }
+        }
+        
+        this.form.submit();
+    });
+    
     document.getElementById('epic').addEventListener('change', function() {
         const selectedEpic = this.value;
         const storySelect = document.getElementById('story');
-        
+
         // Filter stories based on selected epic
         Array.from(storySelect.options).forEach(option => {
             if (option.value === '') {
@@ -11,7 +632,7 @@
                 option.style.display = (!selectedEpic || epicId === selectedEpic) ? 'block' : 'none';
             }
         });
-        
+
         // Reset story selection if it doesn't belong to selected epic
         if (selectedEpic && storySelect.value) {
             const selectedStoryOption = storySelect.options[storySelect.selectedIndex];
@@ -20,15 +641,15 @@
                 storySelect.value = '';
             }
         }
-        
+
         this.form.submit();
     });
-    
+
     // Story dropdown change handler
     document.getElementById('story').addEventListener('change', function() {
         this.form.submit();
     });
-    
+
     // Bulk actions functionality
     const bulkActionsBtn = document.getElementById('bulk-actions-btn');
     const bulkActionsPanel = document.getElementById('bulk-actions-panel');
@@ -36,36 +657,36 @@
     const selectAllCheckbox = document.getElementById('select-all');
     const headerSelectAllCheckbox = document.getElementById('header-select-all');
     const selectedCountSpan = document.getElementById('selected-count');
-    
+
     // Function to update selected count and bulk actions visibility
     function updateBulkActionsState() {
         const checkedBoxes = document.querySelectorAll('.testcase-checkbox:checked');
         const count = checkedBoxes.length;
-        
+
         selectedCountSpan.textContent = count + ' item' + (count !== 1 ? 's' : '') + ' selected';
-        
+
         if (count > 0) {
             bulkActionsBtn.style.display = 'inline-block';
         } else {
             bulkActionsBtn.style.display = 'none';
             bulkActionsPanel.style.display = 'none';
         }
-        
+
         // Update select-all checkboxes state
         const allChecked = count === testcaseCheckboxes.length && count > 0;
         const someChecked = count > 0 && count < testcaseCheckboxes.length;
-        
+
         selectAllCheckbox.checked = allChecked;
         headerSelectAllCheckbox.checked = allChecked;
         selectAllCheckbox.indeterminate = someChecked;
         headerSelectAllCheckbox.indeterminate = someChecked;
     }
-    
+
     // Individual checkbox change handlers
     testcaseCheckboxes.forEach(checkbox => {
         checkbox.addEventListener('change', updateBulkActionsState);
     });
-    
+
     // Select all functionality
     function toggleAllCheckboxes(checked) {
         testcaseCheckboxes.forEach(checkbox => {
@@ -73,15 +694,15 @@
         });
         updateBulkActionsState();
     }
-    
+
     selectAllCheckbox.addEventListener('change', function() {
         toggleAllCheckboxes(this.checked);
     });
-    
+
     headerSelectAllCheckbox.addEventListener('change', function() {
         toggleAllCheckboxes(this.checked);
     });
-    
+
     // Bulk actions button click handler
     bulkActionsBtn.addEventListener('click', function() {
         if (bulkActionsPanel.style.display === 'none' || !bulkActionsPanel.style.display) {
@@ -90,7 +711,7 @@
             bulkActionsPanel.style.display = 'none';
         }
     });
-    
+
     // Cancel bulk actions
     document.getElementById('cancel-bulk-actions').addEventListener('click', function() {
         bulkActionsPanel.style.display = 'none';
@@ -101,29 +722,29 @@
         headerSelectAllCheckbox.checked = false;
         updateBulkActionsState();
     });
-    
+
     // Apply bulk actions
     document.getElementById('apply-bulk-actions').addEventListener('click', function() {
         const checkedBoxes = document.querySelectorAll('.testcase-checkbox:checked');
         const bulkStatus = document.getElementById('bulk-status').value;
         const bulkExecutionStatus = document.getElementById('bulk-execution-status').value;
         const bulkPriority = document.getElementById('bulk-priority').value;
-        
+
         if (checkedBoxes.length === 0) {
             alert('Please select at least one test case.');
             return;
         }
-        
+
         if (!bulkStatus && !bulkExecutionStatus && !bulkPriority) {
             alert('Please select at least one action to apply.');
             return;
         }
-        
+
         if (confirm(`Apply changes to ${checkedBoxes.length} selected test case(s)?`)) {
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = '{% url "test_cases:testcase_list" %}';
-            
+
             // Add CSRF token
             const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
             const csrfInput = document.createElement('input');
@@ -131,14 +752,14 @@
             csrfInput.name = 'csrfmiddlewaretoken';
             csrfInput.value = csrfToken;
             form.appendChild(csrfInput);
-            
+
             // Add bulk action indicator
             const actionInput = document.createElement('input');
             actionInput.type = 'hidden';
             actionInput.name = 'bulk_action';
             actionInput.value = 'true';
             form.appendChild(actionInput);
-            
+
             // Add selected test case IDs
             checkedBoxes.forEach(checkbox => {
                 const idInput = document.createElement('input');
@@ -147,7 +768,7 @@
                 idInput.value = checkbox.value;
                 form.appendChild(idInput);
             });
-            
+
             // Add bulk action values
             if (bulkStatus) {
                 const statusInput = document.createElement('input');
@@ -156,7 +777,7 @@
                 statusInput.value = bulkStatus;
                 form.appendChild(statusInput);
             }
-            
+
             if (bulkExecutionStatus) {
                 const execStatusInput = document.createElement('input');
                 execStatusInput.type = 'hidden';
@@ -164,7 +785,7 @@
                 execStatusInput.value = bulkExecutionStatus;
                 form.appendChild(execStatusInput);
             }
-            
+
             if (bulkPriority) {
                 const priorityInput = document.createElement('input');
                 priorityInput.type = 'hidden';
@@ -172,28 +793,28 @@
                 priorityInput.value = bulkPriority;
                 form.appendChild(priorityInput);
             }
-            
+
             document.body.appendChild(form);
             form.submit();
         }
     });
-    
+
     // Export functionality
     document.getElementById('export-btn').addEventListener('click', function() {
         try {
             // Get current filter parameters
             const urlParams = new URLSearchParams(window.location.search);
             const exportParams = new URLSearchParams();
-            
+
             // Preserve current filters in export
             if (urlParams.get('project')) exportParams.set('project', urlParams.get('project'));
             if (urlParams.get('epic')) exportParams.set('epic', urlParams.get('epic'));
             if (urlParams.get('story')) exportParams.set('story', urlParams.get('story'));
             if (urlParams.get('search')) exportParams.set('search', urlParams.get('search'));
-            
+
             // Add export parameter
             exportParams.set('export', 'excel');
-            
+
             // Create download link
             const exportUrl = window.location.pathname + '?' + exportParams.toString();
             const link = document.createElement('a');
@@ -207,10 +828,10 @@
             alert('An error occurred during export. Please try again.');
         }
     });
-    
+
     // Initialize bulk actions state
     updateBulkActionsState();
-    
+
     // Modal functionality enhancements
     document.addEventListener('DOMContentLoaded', function() {
         // Ensure all modals work properly
@@ -224,7 +845,7 @@
                 }
             });
         });
-        
+
         // Handle form submissions with validation
         const forms = document.querySelectorAll('form[method="post"]');
         forms.forEach(form => {
@@ -232,7 +853,7 @@
                 // Check for required fields
                 const requiredFields = form.querySelectorAll('[required]');
                 let hasErrors = false;
-                
+
                 requiredFields.forEach(field => {
                     if (!field.value.trim()) {
                         field.classList.add('is-invalid');
@@ -241,7 +862,7 @@
                         field.classList.remove('is-invalid');
                     }
                 });
-                
+
                 if (hasErrors) {
                     e.preventDefault();
                     alert('Please fill in all required fields.');
@@ -249,7 +870,7 @@
                 }
             });
         });
-        
+
         // Auto-dismiss alerts after 5 seconds
         const alerts = document.querySelectorAll('.alert:not(.alert-permanent)');
         alerts.forEach(alert => {

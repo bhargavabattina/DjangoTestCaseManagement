@@ -104,19 +104,22 @@
                     <div class="row mb-3">
                         <div class="col-md-4">
                             <label for="project-filter" class="form-label">Filter by Project</label>
-                            <select id="project-filter" class="form-control">
+                            <select id="project-filter" class="form-select">
                                 <option value="">All Projects</option>
+                                {% for project in projects %}
+                                    <option value="{{ project.id }}">{{ project.name }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                         <div class="col-md-4">
                             <label for="epic-filter" class="form-label">Filter by Epic</label>
-                            <select id="epic-filter" class="form-control">
+                            <select id="epic-filter" class="form-select">
                                 <option value="">All Epics</option>
                             </select>
                         </div>
                         <div class="col-md-4">
                             <label for="story-filter" class="form-label">Filter by User Story</label>
-                            <select id="story-filter" class="form-control">
+                            <select id="story-filter" class="form-select">
                                 <option value="">All User Stories</option>
                             </select>
                         </div>
@@ -145,7 +148,7 @@
                     <div class="row mb-3">
                         <div class="col-md-3">
                             <label for="priority-filter" class="form-label">Priority</label>
-                            <select id="priority-filter" class="form-control">
+                            <select id="priority-filter" class="form-select">
                                 <option value="">All Priorities</option>
                                 <option value="critical">Critical</option>
                                 <option value="high">High</option>
@@ -155,7 +158,7 @@
                         </div>
                         <div class="col-md-3">
                             <label for="status-filter" class="form-label">Status</label>
-                            <select id="status-filter" class="form-control">
+                            <select id="status-filter" class="form-select">
                                 <option value="">All Statuses</option>
                                 <option value="draft">Draft</option>
                                 <option value="ready">Ready</option>
@@ -164,7 +167,7 @@
                         </div>
                         <div class="col-md-3">
                             <label for="automation-filter" class="form-label">Automation</label>
-                            <select id="automation-filter" class="form-control">
+                            <select id="automation-filter" class="form-select">
                                 <option value="">All Types</option>
                                 <option value="automated">Automated</option>
                                 <option value="manual">Manual</option>
@@ -295,10 +298,11 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_js %}
 <!-- SortableJS for drag and drop -->
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const projectFilter = document.getElementById('project-filter');
@@ -317,7 +321,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectedSummary = document.getElementById('selected-summary');
     const noSelectedMessage = document.getElementById('no-selected-message');
     const testCasesInput = document.getElementById('{{ form.test_cases.id_for_label }}');
-    
+
     let allTestcases = [];
     let filteredTestcases = [];
     let selectedTestcases = new Set();
@@ -336,9 +340,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Load initial data
-    loadProjects();
     loadTestcases();
-    
+
     // Initialize with existing test cases if editing
     {% if test_suite %}
         const existingTestCases = [
@@ -350,6 +353,8 @@ document.addEventListener('DOMContentLoaded', function() {
             selectedTestcases.add(id);
             selectedTestcasesOrder.push(id);
         });
+        updateSelectedTestcases();
+        updateSummary();
     {% endif %}
 
     // Event listeners
@@ -396,8 +401,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('toggle-view').addEventListener('click', function() {
         isListView = !isListView;
-        this.innerHTML = isListView ? 
-            '<i class="fas fa-th"></i> Grid View' : 
+        this.innerHTML = isListView ?
+            '<i class="fas fa-th"></i> Grid View' :
             '<i class="fas fa-th-list"></i> List View';
         updateTestcaseDisplay();
     });
@@ -417,8 +422,11 @@ document.addEventListener('DOMContentLoaded', function() {
         updateTestCasesInput();
     });
 
-    // Load projects
+    // Load projects (already populated in template, but ensure consistency)
     function loadProjects() {
+        // Projects are already rendered in the template
+        // If needed, fetch dynamically:
+        /*
         fetch('{% url "test_cases:project_list" %}?format=json')
             .then(response => response.json())
             .then(data => {
@@ -433,13 +441,14 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(error => {
                 console.error('Error loading projects:', error);
             });
+        */
     }
 
     // Load epics based on selected project
     function loadEpics(projectId) {
         epicFilter.innerHTML = '<option value="">All Epics</option>';
         storyFilter.innerHTML = '<option value="">All User Stories</option>';
-        
+
         if (!projectId) return;
 
         fetch(`{% url "test_cases:get_epics_by_project" %}?project_id=${projectId}`)
@@ -460,7 +469,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load stories based on selected epic
     function loadStories(epicId) {
         storyFilter.innerHTML = '<option value="">All User Stories</option>';
-        
+
         if (!epicId) return;
 
         fetch(`{% url "test_cases:get_stories_by_epic" %}?epic_id=${epicId}`)
@@ -512,13 +521,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const automation = automationFilter.value;
 
         filteredTestcases = allTestcases.filter(tc => {
-            const matchesSearch = !searchTerm || 
+            const matchesSearch = !searchTerm ||
                 tc.name.toLowerCase().includes(searchTerm) ||
                 (tc.description && tc.description.toLowerCase().includes(searchTerm));
-            
+
             const matchesPriority = !priority || tc.priority === priority;
             const matchesStatus = !status || tc.status === status;
-            const matchesAutomation = !automation || 
+            const matchesAutomation = !automation ||
                 (automation === 'automated' && tc.is_automated) ||
                 (automation === 'manual' && !tc.is_automated);
 
@@ -540,14 +549,14 @@ document.addEventListener('DOMContentLoaded', function() {
         testcasesList.style.display = 'flex';
         testcasesList.className = isListView ? 'list-group' : 'row';
         testcasesList.innerHTML = '';
-        
+
         filteredTestcases.forEach(tc => {
             const isSelected = selectedTestcases.has(tc.id);
             const cardClass = isListView ? 'list-group-item' : 'col-md-6 col-lg-4 mb-3';
-            
+
             const div = document.createElement('div');
             div.className = cardClass;
-            
+
             if (isListView) {
                 div.innerHTML = `
                     <div class="d-flex justify-content-between align-items-center ${isSelected ? 'bg-primary text-white' : ''} p-2 rounded testcase-item" data-testcase-id="${tc.id}">
@@ -559,6 +568,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             <span class="badge bg-${getPriorityColor(tc.priority)}">${tc.priority}</span>
                             <span class="badge bg-${getStatusColor(tc.status)}">${tc.status}</span>
                             ${tc.is_automated ? '<i class="fas fa-robot ms-1" title="Automated"></i>' : ''}
+                            <button type="button" class="btn btn-sm btn-info ms-2 view-details" data-testcase-id="${tc.id}">
+                                <i class="fas fa-eye"></i>
+                            </button>
                         </div>
                     </div>
                 `;
@@ -575,19 +587,29 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                                 <div>
                                     ${tc.is_automated ? '<i class="fas fa-robot" title="Automated"></i>' : '<i class="fas fa-user" title="Manual"></i>'}
+                                    <button type="button" class="btn btn-sm btn-info ms-2 view-details" data-testcase-id="${tc.id}">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 `;
             }
-            
+
             const testcaseItem = div.querySelector('.testcase-item');
             testcaseItem.style.cursor = 'pointer';
-            testcaseItem.addEventListener('click', function() {
-                toggleTestcaseSelection(tc.id);
+            testcaseItem.addEventListener('click', function(e) {
+                if (!e.target.classList.contains('view-details')) {
+                    toggleTestcaseSelection(tc.id);
+                }
             });
-            
+
+            const viewDetailsBtn = div.querySelector('.view-details');
+            viewDetailsBtn.addEventListener('click', function() {
+                showTestcaseDetails(tc.id);
+            });
+
             testcasesList.appendChild(div);
         });
 
@@ -603,7 +625,7 @@ document.addEventListener('DOMContentLoaded', function() {
             selectedTestcases.add(testcaseId);
             selectedTestcasesOrder.push(testcaseId);
         }
-        
+
         updateTestcaseDisplay();
         updateSelectedTestcases();
         updateSummary();
@@ -620,13 +642,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         selectedSummary.style.display = 'block';
         selectedTestcasesList.innerHTML = '';
-        
+
         selectedTestcasesOrder.forEach((testcaseId, index) => {
             const tc = allTestcases.find(t => t.id === testcaseId);
             if (!tc) return;
-            
+
             const div = document.createElement('div');
             div.className = 'selected-testcase-item card mb-2';
+            div.setAttribute('data-testcase-id', tc.id);
             div.innerHTML = `
                 <div class="card-body py-2">
                     <div class="d-flex align-items-center">
@@ -652,12 +675,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
             `;
-            
+
             const removeBtn = div.querySelector('.remove-testcase');
             removeBtn.addEventListener('click', function() {
                 toggleTestcaseSelection(tc.id);
             });
-            
+
             selectedTestcasesList.appendChild(div);
         });
 
@@ -668,14 +691,14 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateSelectedOrder() {
         const items = selectedTestcasesList.querySelectorAll('.selected-testcase-item');
         selectedTestcasesOrder = Array.from(items).map(item => {
-            return parseInt(item.querySelector('.remove-testcase').dataset.testcaseId);
+            return parseInt(item.getAttribute('data-testcase-id'));
         });
-        
+
         // Update order numbers
         items.forEach((item, index) => {
             item.querySelector('.order-number .badge').textContent = index + 1;
         });
-        
+
         updateTestCasesInput();
     }
 
@@ -690,7 +713,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateSummary() {
         const count = selectedTestcases.size;
         document.getElementById('total-testcases').textContent = count;
-        
+
         if (count === 0) {
             selectedSummary.style.display = 'none';
             return;
@@ -699,14 +722,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedTcs = allTestcases.filter(tc => selectedTestcases.has(tc.id));
         const priorityCounts = {};
         let estimatedTime = 0;
-        
+
         selectedTcs.forEach(tc => {
             priorityCounts[tc.priority] = (priorityCounts[tc.priority] || 0) + 1;
-            estimatedTime += tc.estimated_time || 0.5; // Default 30 minutes per test case
+            estimatedTime += tc.estimated_time || 0.5;
         });
 
         document.getElementById('estimated-time').textContent = estimatedTime.toFixed(1);
-        
+
         const distributionDiv = document.getElementById('priority-distribution');
         let distributionHtml = '<small><strong>Priority Distribution:</strong><br>';
         Object.entries(priorityCounts).forEach(([priority, count]) => {
@@ -719,4 +742,56 @@ document.addEventListener('DOMContentLoaded', function() {
     // Update hidden input with selected test cases
     function updateTestCasesInput() {
         const selectedIds = selectedTestcasesOrder.join(',');
-        
+        testCasesInput.value = selectedIds;
+    }
+
+    // Get priority color
+    function getPriorityColor(priority) {
+        switch (priority.toLowerCase()) {
+            case 'critical': return 'danger';
+            case 'high': return 'warning';
+            case 'medium': return 'info';
+            case 'low': return 'secondary';
+            default: return 'secondary';
+        }
+    }
+
+    // Get status color
+    function getStatusColor(status) {
+        switch (status.toLowerCase()) {
+            case 'ready': return 'success';
+            case 'draft': return 'secondary';
+            case 'blocked': return 'warning';
+            default: return 'secondary';
+        }
+    }
+
+    // Show test case details in modal
+    function showTestcaseDetails(testcaseId) {
+        const tc = allTestcases.find(t => t.id === testcaseId);
+        if (!tc) return;
+
+        const modalContent = document.getElementById('testcase-detail-content');
+        modalContent.innerHTML = `
+            <h6>${tc.name}</h6>
+            <p><strong>User Story:</strong> ${tc.user_story_name || 'N/A'}</p>
+            <p><strong>Priority:</strong> <span class="badge bg-${getPriorityColor(tc.priority)}">${tc.priority}</span></p>
+            <p><strong>Status:</strong> <span class="badge bg-${getStatusColor(tc.status)}">${tc.status}</span></p>
+            <p><strong>Automation:</strong> ${tc.is_automated ? 'Automated' : 'Manual'}</p>
+            ${tc.description ? `<div class="mt-3"><strong>Description:</strong><div class="p-3 bg-light rounded">${tc.description}</div></div>` : ''}
+        `;
+
+        const addButton = document.getElementById('add-to-suite-btn');
+        addButton.setAttribute('data-testcase-id', testcaseId);
+        addButton.style.display = selectedTestcases.has(testcaseId) ? 'none' : 'block';
+
+        addButton.onclick = function() {
+            toggleTestcaseSelection(testcaseId);
+            bootstrap.Modal.getInstance(document.getElementById('testcaseDetailModal')).hide();
+        };
+
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('testcaseDetailModal')).show();
+    }
+});
+</script>
+{% endblock %}

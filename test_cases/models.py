@@ -166,7 +166,7 @@ class TestRun(models.Model):
         ('completed', 'Completed'),
         ('cancelled', 'Cancelled'),
     ]
-    
+
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_started')
@@ -174,51 +174,40 @@ class TestRun(models.Model):
     created_date = models.DateTimeField(default=timezone.now)
     updated_date = models.DateTimeField(auto_now=True)
     scheduled_date = models.DateTimeField(null=True, blank=True)
-    
+
     class Meta:
         ordering = ['-created_date']
         verbose_name_plural = "Test Runs"
-    
+
     def __str__(self):
         return self.name
-    
+
     def get_execution_summary(self):
-        executions = self.test_executions.all()
-        
-        total = executions.count()
-        if total == 0:
-            return {
-                'total': 0,
-                'not_executed': 0,
-                'in_progress': 0,
-                'passed': 0,
-                'failed': 0,
-                'skipped': 0,
-                'blocked': 0,
-                'pass_rate': 0,
-            }
-        
-        not_executed = executions.filter(status='not_executed').count()
-        in_progress = executions.filter(status='in_progress').count()
-        passed = executions.filter(status='passed').count()
-        failed = executions.filter(status='failed').count()
-        skipped = executions.filter(status='skipped').count()
-        blocked = executions.filter(status='blocked').count()
-        
-        executed = passed + failed + skipped + blocked
-        pass_rate = (passed / executed * 100) if executed > 0 else 0
-        
-        return {
-            'total': total,
-            'not_executed': not_executed,
-            'in_progress': in_progress,
-            'passed': passed,
-            'failed': failed,
-            'skipped': skipped,
-            'blocked': blocked,
-            'pass_rate': pass_rate,
+        summary = {
+            'passed': self.test_executions.filter(status='passed').count(),
+            'failed': self.test_executions.filter(status='failed').count(),
+            'skipped': self.test_executions.filter(status='skipped').count(),
+            'blocked': self.test_executions.filter(status='blocked').count(),
+            'in_progress': self.test_executions.filter(status='in_progress').count(),
+            'not_executed': self.test_executions.filter(status='not_executed').count(),
         }
 
+        total = sum(summary.values())
+        summary['total'] = total
+
+        # Calculate percentages
+        if total > 0:
+            summary['passed_percentage'] = round((summary['passed'] / total) * 100, 1)
+            summary['failed_percentage'] = round((summary['failed'] / total) * 100, 1)
+            summary['skipped_percentage'] = round((summary['skipped'] / total) * 100, 1)
+            summary['blocked_percentage'] = round((summary['blocked'] / total) * 100, 1)
+        else:
+            summary['passed_percentage'] = 0
+            summary['failed_percentage'] = 0
+            summary['skipped_percentage'] = 0
+            summary['blocked_percentage'] = 0
+
+        return summary
 
 class TestExecution(models.Model):
     STATUS_CHOICES = [
@@ -229,7 +218,7 @@ class TestExecution(models.Model):
         ('skipped', 'Skipped'),
         ('blocked', 'Blocked'),
     ]
-    
+
     testcase = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name='test_executions')
     test_run = models.ForeignKey(TestRun, on_delete=models.CASCADE, related_name='test_executions')
     executor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='test_executions')
@@ -238,11 +227,11 @@ class TestExecution(models.Model):
     comments = models.TextField(blank=True)
     execution_time_minutes = models.PositiveIntegerField(null=True, blank=True)
     notes = models.TextField(blank=True)
-    
+
     class Meta:
         ordering = ['testcase__priority', 'execution_date']
         verbose_name_plural = "Test Executions"
-    
+
     def __str__(self):
         return f"{self.test_run.name} - {self.testcase.name} - {self.get_status_display()}"
 

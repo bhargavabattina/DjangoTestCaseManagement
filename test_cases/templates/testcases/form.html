@@ -619,12 +619,19 @@ document.addEventListener('DOMContentLoaded', function() {
         clearOptions(userStorySelect, 'Select User Story...');
         
         if (!epicId) {
+            userStorySelect.disabled = true;
             return;
         }
         
         // Show loading state
         toggleLoading(userStoryLoadingDiv, true);
         userStorySelect.disabled = true;
+        
+        // Clear any previous errors
+        const existingError = userStorySelect.parentNode.querySelector('.ajax-error');
+        if (existingError) {
+            existingError.remove();
+        }
         
         // Make AJAX request to get user stories for selected epic
         fetch(`{% url 'test_cases:get_stories_by_epic' %}?epic_id=${epicId}`, {
@@ -641,22 +648,40 @@ document.addEventListener('DOMContentLoaded', function() {
             return response.json();
         })
         .then(data => {
+            if (!Array.isArray(data)) {
+                throw new Error('Invalid response format');
+            }
+            
             populateOptions(userStorySelect, data, 'Select User Story...');
-            toggleLoading(userStoryLoadingDiv, false);
-            userStorySelect.disabled = false;
+            
             // If editing and initial user story is set, select it
             {% if testcase %}
             const initialUserStoryId = "{{ testcase.user_story.pk }}";
-            if (userStorySelect.querySelector(`option[value="${initialUserStoryId}"]`)) {
+            if (initialUserStoryId && userStorySelect.querySelector(`option[value="${initialUserStoryId}"]`)) {
                 userStorySelect.value = initialUserStoryId;
             }
             {% endif %}
         })
         .catch(error => {
             console.error('Error fetching user stories:', error);
+            showError(userStorySelect.parentNode, 'Failed to load user stories. Please try again or refresh the page.');
+            
+            // If we have a test case but failed to load user stories, try to enable the user story select
+            // with the current value to allow form submission
+            {% if testcase %}
+            const initialUserStoryId = "{{ testcase.user_story.pk }}";
+            if (initialUserStoryId) {
+                const option = document.createElement('option');
+                option.value = initialUserStoryId;
+                option.textContent = '{{ testcase.user_story.title }}';
+                userStorySelect.appendChild(option);
+                userStorySelect.value = initialUserStoryId;
+            }
+            {% endif %}
+        })
+        .finally(() => {
             toggleLoading(userStoryLoadingDiv, false);
             userStorySelect.disabled = false;
-            showError(userStorySelect.parentNode, 'Failed to load user stories. Please try again or refresh the page.');
         });
     }
     
@@ -669,80 +694,168 @@ document.addEventListener('DOMContentLoaded', function() {
         epicSelect.addEventListener('change', handleEpicChange);
     }
     
-    // Initialize cascading dropdowns on page load for edit scenario or new test case
-    {% if testcase %}
-    // For edit scenario, pre-populate the dropdowns based on existing data
-    // Set the initial project value and trigger the chain reaction
-    if (projectSelect && "{{ testcase.user_story.epic.project.pk }}") {
-        projectSelect.value = "{{ testcase.user_story.epic.project.pk }}";
-        handleProjectChange(); // This will load epics
+    // Initialize cascading dropdowns on page load
+    function initializeDropdowns() {
+        // First, ensure all dropdowns are in a clean state
+        projectSelect.disabled = false;
+        epicSelect.disabled = true;
+        userStorySelect.disabled = true;
+        
+        // Clear any existing options except the first one
+        clearOptions(epicSelect, 'Select Epic...');
+        clearOptions(userStorySelect, 'Select User Story...');
+        
+        // Handle edit scenario
+        {% if testcase %}
+        const projectId = "{{ testcase.user_story.epic.project.pk }}";
+        const epicId = "{{ testcase.user_story.epic.pk }}";
+        const userStoryId = "{{ testcase.user_story.pk }}";
+        
+        if (projectId) {
+            // Set the project and trigger the change to load epics
+            projectSelect.value = projectId;
+            
+            // Small delay to ensure the change event is processed
+            setTimeout(() => {
+                // After epics are loaded, set the epic and trigger user stories load
+                if (epicId) {
+                    // Wait for epics to be populated
+                    const checkEpic = setInterval(() => {
+                        const epicOption = epicSelect.querySelector(`option[value="${epicId}"]`);
+                        if (epicOption) {
+                            clearInterval(checkEpic);
+                            epicSelect.value = epicId;
+                            
+                            // After a small delay, set the user story
+                            setTimeout(() => {
+                                if (userStoryId) {
+                                    const userStoryOption = userStorySelect.querySelector(`option[value="${userStoryId}"]`);
+                                    if (userStoryOption) {
+                                        userStorySelect.value = userStoryId;
+                                    }
+                                }
+                            }, 300);
+                        }
+                    }, 100);
+                }
+            }, 300);
+            
+            // Trigger the initial project change
+            handleProjectChange();
+        }
+        {% else %}
+        // For new test cases, check if there are initial values in the form
+        const initialProjectId = projectSelect.value;
+        if (initialProjectId) {
+            // If there's an initial project selected, trigger the change
+            handleProjectChange();
+            
+            // Check for initial epic after a delay
+            setTimeout(() => {
+                const initialEpicId = epicSelect.value;
+                if (initialEpicId) {
+                    handleEpicChange();
+                }
+            }, 300);
+        }
+        {% endif %}
     }
-    {% else %}
-    // For a new test case, if there are pre-selected values from Django form (e.g. from initial data),
-    // trigger the change events to populate lower level dropdowns.
-    // However, for project/epic, they are empty initially unless overridden,
-    // so we need to populate initial projects here.
-    // For this context, we assume all projects are available in the initial `form.project` options.
-    // No explicit AJAX call for initial projects is needed as Django renders them.
-    // Just enable the dropdowns if not disabled by default or form logic.
-    projectSelect.disabled = false;
-    epicSelect.disabled = true; // Start disabled
-    userStorySelect.disabled = true; // Start disabled
-    {% endif %}
+    
+    // Initialize the dropdowns when the page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        // Small delay to ensure all elements are rendered
+        setTimeout(initializeDropdowns, 100);
+    });
 
     // Form validation and submission
     const form = document.querySelector('form');
     form.addEventListener('submit', function(e) {
-        // Update hidden fields before submission
+        // Update hidden fields before validation
         descriptionField.value = descriptionEditor.root.innerHTML;
         testStepsField.value = testStepsEditor.root.innerHTML;
         expectedResultsField.value = expectedResultsEditor.root.innerHTML;
         
-        // Validate required fields
+        // Required fields validation
+        const nameField = document.getElementById('{{ form.name.id_for_label }}');
         const requiredFields = [
             { field: projectSelect, name: 'Project' },
             { field: epicSelect, name: 'Epic' },
             { field: userStorySelect, name: 'User Story' },
-            { field: document.getElementById('{{ form.name.id_for_label }}'), name: 'Test Case Name' },
+            { field: nameField, name: 'Test Case Name' },
             { field: testStepsField, name: 'Test Steps' },
             { field: expectedResultsField, name: 'Expected Results' }
         ];
         
+        // Reset previous validations
+        document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        document.querySelectorAll('.ajax-error').forEach(el => el.remove());
+        
+        // Validate all required fields
         let firstInvalidField = null;
         let isValid = true;
         
         requiredFields.forEach(({field, name}) => {
-            if (!field.value.trim() && field.required) { // Check field.required as well
+            if (field && (!field.value || !field.value.trim())) {
                 field.classList.add('is-invalid');
+                const errorMsg = document.createElement('div');
+                errorMsg.className = 'invalid-feedback';
+                errorMsg.textContent = `${name} is required`;
+                
+                const existingError = field.parentNode.querySelector('.invalid-feedback');
+                if (!existingError) {
+                    field.parentNode.appendChild(errorMsg);
+                }
+                
                 if (!firstInvalidField) {
                     firstInvalidField = field;
                 }
                 isValid = false;
-            } else {
-                field.classList.remove('is-invalid');
             }
         });
         
+        // If validation fails, prevent form submission
         if (!isValid) {
             e.preventDefault();
             if (firstInvalidField) {
                 firstInvalidField.focus();
                 firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Show error message at the top of the form
+                const errorAlert = document.createElement('div');
+                errorAlert.className = 'alert alert-danger';
+                errorAlert.innerHTML = `
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Please fill in all required fields marked with *
+                `;
+                const formGroup = form.querySelector('.card-body');
+                if (formGroup) {
+                    formGroup.insertBefore(errorAlert, formGroup.firstChild);
+                }
+                
+                // Auto-remove error after 5 seconds
+                setTimeout(() => {
+                    errorAlert.remove();
+                }, 5000);
             }
             return false;
         }
         
-        // Show loading state
+        // If we get here, all validations passed
+        // Show loading state on submit button
         const submitButton = this.querySelector('button[type="submit"]');
-        const originalText = submitButton.innerHTML;
-        submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
-        submitButton.disabled = true;
-        
-        // Re-enable button after 10 seconds as fallback
-        setTimeout(function() {
-            submitButton.innerHTML = originalText;
-            submitButton.disabled = false;
-        }, 10000);
+        if (submitButton) {
+            const originalText = submitButton.innerHTML;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
+            submitButton.disabled = true;
+            
+            // Re-enable button after 10 seconds as fallback
+            setTimeout(() => {
+                if (submitButton.disabled) {
+                    submitButton.innerHTML = originalText;
+                    submitButton.disabled = false;
+                }
+            }, 10000);
+        }
     });
 
     // Priority indicator
