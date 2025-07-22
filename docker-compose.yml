@@ -31,6 +31,7 @@ services:
       - .:/app
       - ./static:/app/static
       - ./media:/app/media
+      - ./staticfiles:/app/staticfiles
     environment:
       - DEBUG=True
       - DB_HOST=mysql
@@ -38,18 +39,23 @@ services:
       - DB_USER=root
       - DB_PASSWORD=hXLujfuQ
       - DB_PORT=3306
+      - DB_CHARSET=utf8mb4
+      - DB_CONN_MAX_AGE=600
       - SECRET_KEY=django-insecure-docker-development-key
-      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,.clackypaas.com
     depends_on:
       mysql:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/accounts/login/"]
       timeout: 10s
       retries: 5
       interval: 30s
-    command: python manage.py runserver 0.0.0.0:8000
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
 
 volumes:
   mysql_data:
