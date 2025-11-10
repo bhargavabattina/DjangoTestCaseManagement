@@ -21,10 +21,12 @@ services:
       retries: 10
       interval: 30s
     command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    networks:
+      - testcase_network
 
-  web:
+  backend:
     build: .
-    container_name: testcase_web
+    container_name: testcase_backend
     ports:
       - "8000:8000"
     volumes:
@@ -42,13 +44,14 @@ services:
       - DB_CHARSET=utf8mb4
       - DB_CONN_MAX_AGE=600
       - SECRET_KEY=django-insecure-docker-development-key
-      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,.clackypaas.com
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,backend,.clackypaas.com
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://frontend:3000
     depends_on:
       mysql:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/accounts/login/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/"]
       timeout: 10s
       retries: 5
       interval: 30s
@@ -56,11 +59,31 @@ services:
       sh -c "python manage.py migrate &&
              python manage.py collectstatic --noinput &&
              python manage.py runserver 0.0.0.0:8000"
+    networks:
+      - testcase_network
+
+  frontend:
+    build: ./frontend
+    container_name: testcase_frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+    depends_on:
+      - backend
+    restart: unless-stopped
+    command: npm run dev
+    networks:
+      - testcase_network
 
 volumes:
   mysql_data:
     driver: local
 
 networks:
-  default:
+  testcase_network:
     driver: bridge
