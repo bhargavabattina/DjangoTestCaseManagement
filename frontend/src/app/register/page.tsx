@@ -71,92 +71,116 @@ export default function Register() {
             <p className="text-gray-600 mt-2">Join TestHub today</p>
           </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="label">Username</label>
-            <input
-              type="text"
-              className="input"
-              value={formData.username}
-              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              required
-            />
-          </div>
-
-          <div>
-            <label className="label">Email</label>
-            <input
-              type="email"
-              className="input"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="label">First Name</label>
+              <label className="label">Username</label>
               <input
                 type="text"
                 className="input"
-                value={formData.first_name}
-                onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 required
+                placeholder="Enter your username"
               />
             </div>
 
             <div>
-              <label className="label">Last Name</label>
+              <label className="label">Email</label>
               <input
-                type="text"
+                type="email"
                 className="input"
-                value={formData.last_name}
-                onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
+                placeholder="Enter your email"
               />
             </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">First Name</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={formData.first_name}
+                  onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                  required
+                  placeholder="First name"
+                />
+              </div>
+
+              <div>
+                <label className="label">Last Name</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={formData.last_name}
+                  onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                  required
+                  placeholder="Last name"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Password</label>
+              <input
+                type="password"
+                className="input"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required
+                minLength={8}
+                placeholder="Minimum 8 characters"
+              />
+            </div>
+
+            <div>
+              <label className="label">Confirm Password</label>
+              <input
+                type="password"
+                className="input"
+                value={formData.password_confirm}
+                onChange={(e) => setFormData({ ...formData, password_confirm: e.target.value })}
+                required
+                minLength={8}
+                placeholder="Confirm your password"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full btn-primary flex items-center justify-center"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creating account...
+                </>
+              ) : (
+                <>
+                  <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                  Create Account
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-gray-600">
+              Already have an account?{' '}
+              <Link href="/login" className="text-primary-600 hover:text-primary-700 font-semibold hover:underline">
+                Sign in
+              </Link>
+            </p>
           </div>
-
-          <div>
-            <label className="label">Password</label>
-            <input
-              type="password"
-              className="input"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              required
-              minLength={8}
-            />
-          </div>
-
-          <div>
-            <label className="label">Confirm Password</label>
-            <input
-              type="password"
-              className="input"
-              value={formData.password_confirm}
-              onChange={(e) => setFormData({ ...formData, password_confirm: e.target.value })}
-              required
-              minLength={8}
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="w-full btn-primary"
-            disabled={isLoading}
-          >
-            {isLoading ? 'Creating account...' : 'Create Account'}
-          </button>
-        </form>
-
-        <p className="text-center mt-6 text-gray-600">
-          Already have an account?{' '}
-          <Link href="/login" className="text-primary-600 hover:text-primary-700 font-medium">
-            Sign in
-          </Link>
-        </p>
+        </div>
       </div>
     </div>
   );
