@@ -271,31 +271,41 @@ export default function TestCasesPage() {
 
   return (
     <AuthLayout>
-      <div className="px-4 sm:px-0">
-        <div className="sm:flex sm:items-center sm:justify-between mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Test Cases</h1>
-          <button
-            onClick={() => setShowModal(true)}
-            className="btn-primary mt-4 sm:mt-0 flex items-center"
-          >
-            <PlusIcon className="h-5 w-5 mr-2" />
-            New Test Case
-          </button>
+      <div className="px-4 sm:px-0 animate-fade-in">
+        <div className="page-header">
+          <div className="sm:flex sm:items-center sm:justify-between">
+            <div>
+              <h1 className="page-title">Test Cases</h1>
+              <p className="text-gray-600 mt-2">Create and manage your test case library</p>
+            </div>
+            <button
+              onClick={() => setShowModal(true)}
+              className="btn-primary mt-4 sm:mt-0 flex items-center"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              New Test Case
+            </button>
+          </div>
         </div>
 
         {/* Search */}
         <div className="mb-6">
-          <input
-            type="text"
-            placeholder="Search test cases..."
-            className="input max-w-md"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <div className="relative max-w-md">
+            <input
+              type="text"
+              placeholder="Search test cases..."
+              className="input pl-10"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <svg className="h-5 w-5 text-gray-400 absolute left-3 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
         </div>
 
         {/* Test Cases Table */}
-        <div className="card">
+        <div className="card hover:shadow-2xl transition-all">
           <Table columns={columns} data={testCases} />
         </div>
 

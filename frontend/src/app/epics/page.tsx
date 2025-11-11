@@ -165,43 +165,58 @@ export default function EpicsPage() {
 
   return (
     <AuthLayout>
-      <div className="px-4 sm:px-0">
-        <div className="sm:flex sm:items-center sm:justify-between mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Epics</h1>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="btn-primary mt-4 sm:mt-0 flex items-center"
-          >
-            <PlusIcon className="h-5 w-5 mr-2" />
-            New Epic
-          </button>
+      <div className="px-4 sm:px-0 animate-fade-in">
+        <div className="page-header">
+          <div className="sm:flex sm:items-center sm:justify-between">
+            <div>
+              <h1 className="page-title">Epics</h1>
+              <p className="text-gray-600 mt-2">Organize your work into manageable epics</p>
+            </div>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="btn-primary mt-4 sm:mt-0 flex items-center"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              New Epic
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
         <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <input
-            type="text"
-            placeholder="Search epics..."
-            className="input"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <select
-            className="input"
-            value={selectedProject}
-            onChange={(e) => setSelectedProject(e.target.value ? Number(e.target.value) : '')}
-          >
-            <option value="">All Projects</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search epics..."
+              className="input pl-10"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <svg className="h-5 w-5 text-gray-400 absolute left-3 top-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <div className="relative">
+            <select
+              className="input pl-10"
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value ? Number(e.target.value) : '')}
+            >
+              <option value="">All Projects</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+            <svg className="h-5 w-5 text-gray-400 absolute left-3 top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+          </div>
         </div>
 
         {/* Epics Table */}
-        <div className="card">
+        <div className="card hover:shadow-2xl transition-all">
           <Table columns={columns} data={epics} />
         </div>
 

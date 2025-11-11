@@ -44,13 +44,32 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 py-12">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-600 via-primary-700 to-indigo-700 py-12 animate-fade-in">
       <Toaster position="top-right" />
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Create Account</h1>
-          <p className="text-gray-600 mt-2">Sign up for Test Case Management</p>
-        </div>
+
+      {/* Background decoration */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/10 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white/10 rounded-full blur-3xl"></div>
+      </div>
+
+      <div className="max-w-md w-full mx-4 relative z-10">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 backdrop-blur-sm animate-slide-in">
+          {/* Logo/Icon */}
+          <div className="flex justify-center mb-6">
+            <div className="h-16 w-16 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform">
+              <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">
+              Create Account
+            </h1>
+            <p className="text-gray-600 mt-2">Join TestHub today</p>
+          </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

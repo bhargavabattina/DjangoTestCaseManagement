@@ -3,6 +3,17 @@
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
+import {
+  HomeIcon,
+  FolderIcon,
+  DocumentTextIcon,
+  BookOpenIcon,
+  ClipboardDocumentCheckIcon,
+  RectangleStackIcon,
+  PlayIcon,
+  ArrowRightOnRectangleIcon,
+  BeakerIcon,
+} from '@heroicons/react/24/outline';
 
 export default function Navbar() {
   const router = useRouter();
@@ -16,50 +27,58 @@ export default function Navbar() {
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/');
 
-  const navLinkClass = (path: string) =>
-    `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-      isActive(path)
-        ? 'border-primary-500 text-gray-900'
-        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-    }`;
+  const navItems = [
+    { path: '/dashboard', label: 'Dashboard', icon: HomeIcon },
+    { path: '/projects', label: 'Projects', icon: FolderIcon },
+    { path: '/epics', label: 'Epics', icon: BookOpenIcon },
+    { path: '/stories', label: 'Stories', icon: DocumentTextIcon },
+    { path: '/testcases', label: 'Test Cases', icon: ClipboardDocumentCheckIcon },
+    { path: '/test-suites', label: 'Test Suites', icon: RectangleStackIcon },
+    { path: '/test-runs', label: 'Test Runs', icon: PlayIcon },
+  ];
 
   return (
-    <nav className="bg-white shadow-md">
+    <nav className="bg-gradient-to-r from-primary-600 via-primary-700 to-indigo-700 shadow-2xl sticky top-0 z-50 animate-slide-in">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
-              <Link href="/dashboard" className="text-xl font-bold text-primary-600">
-                Test Case Management
+              <Link href="/dashboard" className="flex items-center space-x-2 group">
+                <BeakerIcon className="h-8 w-8 text-white group-hover:scale-110 transition-transform duration-200" />
+                <span className="text-xl font-extrabold text-white group-hover:text-blue-100 transition-colors">
+                  TestHub
+                </span>
               </Link>
             </div>
-            <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-              <Link href="/dashboard" className={navLinkClass('/dashboard')}>
-                Dashboard
-              </Link>
-              <Link href="/projects" className={navLinkClass('/projects')}>
-                Projects
-              </Link>
-              <Link href="/epics" className={navLinkClass('/epics')}>
-                Epics
-              </Link>
-              <Link href="/stories" className={navLinkClass('/stories')}>
-                Stories
-              </Link>
-              <Link href="/testcases" className={navLinkClass('/testcases')}>
-                Test Cases
-              </Link>
-              <Link href="/test-suites" className={navLinkClass('/test-suites')}>
-                Test Suites
-              </Link>
-              <Link href="/test-runs" className={navLinkClass('/test-runs')}>
-                Test Runs
-              </Link>
+            <div className="hidden lg:ml-8 lg:flex lg:space-x-1">
+              {navItems.map(({ path, label, icon: Icon }) => (
+                <Link
+                  key={path}
+                  href={path}
+                  className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                    isActive(path)
+                      ? 'bg-white text-primary-700 shadow-lg scale-105'
+                      : 'text-white hover:bg-white/20 hover:scale-105'
+                  }`}
+                >
+                  <Icon className="h-5 w-5 mr-2" />
+                  {label}
+                </Link>
+              ))}
             </div>
           </div>
-          <div className="flex items-center">
-            <span className="text-gray-700 mr-4">{user?.full_name || user?.username}</span>
-            <button onClick={handleLogout} className="btn-secondary">
+          <div className="flex items-center space-x-4">
+            <div className="hidden md:flex items-center space-x-3 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
+              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-bold text-sm shadow-lg">
+                {(user?.full_name?.[0] || user?.username?.[0] || 'U').toUpperCase()}
+              </div>
+              <span className="text-white font-medium">{user?.full_name || user?.username}</span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white font-semibold rounded-lg transition-all duration-200 hover:scale-105 shadow-lg"
+            >
+              <ArrowRightOnRectangleIcon className="h-5 w-5 mr-2" />
               Logout
             </button>
           </div>
